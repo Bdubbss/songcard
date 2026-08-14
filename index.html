@@ -188,6 +188,7 @@
   <button class="tabbtn" id="tabArtists" type="button">Artists</button>
   <button class="tabbtn" id="tabPublishers" type="button">Publishers</button>
   <button class="tabbtn" id="tabLabels" type="button">Labels</button>
+  <button class="tabbtn" id="tabContacts" type="button">Contacts</button>
   <button class="tabbtn" id="tabTags" type="button">Tags</button>
   <button class="tabbtn" id="tabAlbums" type="button">Albums</button>
   <button class="tabbtn" id="tabStats" type="button">Stats</button>
@@ -223,6 +224,7 @@
   const WRITER_STORAGE_KEY = 'song_writers_v1';
   const PUBLISHER_STORAGE_KEY = 'song_publishers_v1';
   const LABEL_STORAGE_KEY = 'song_labels_v1';
+  const CONTACT_STORAGE_KEY = 'song_contacts_v1';
 
   let entries = [];
   let albums = [];
@@ -230,13 +232,15 @@
   let writers = [];
   let publishers = [];
   let labels = [];
+  let contacts = [];
   let loaded = false;
-  let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
+  let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | contacts | contactDetail | stats
   let tagFilter = null;
   let albumFilterId = null;
   let entityIndexType = null;   // 'writer' | 'artist' | 'publisher' | 'label'
   let entityFilterType = null;
   let entityFilterId = null;
+  let contactDetailId = null;
   let revisitOnly = false;
   let priorityOnly = false;
   let sortMode = 'new';
@@ -257,6 +261,7 @@
   const tabArtists = document.getElementById('tabArtists');
   const tabPublishers = document.getElementById('tabPublishers');
   const tabLabels = document.getElementById('tabLabels');
+  const tabContacts = document.getElementById('tabContacts');
   const tabTags = document.getElementById('tabTags');
   const tabAlbums = document.getElementById('tabAlbums');
   const tabStats = document.getElementById('tabStats');
@@ -295,6 +300,16 @@
   function spotifyUrl(q){ return 'https://open.spotify.com/search/' + encodeURIComponent(q); }
   function geniusUrl(q){ return 'https://genius.com/search?q=' + encodeURIComponent(q); }
   function songviewUrl(q){ return 'https://repertoire.bmi.com/Search/Search?q=' + encodeURIComponent(q); }
+  function mlcUrl(){ return 'https://portal.themlc.com/search'; }
+
+  function findContactById(id){ if(!id) return null; return contacts.find(function(c){ return c.id===id; }) || null; }
+  async function saveContacts(){
+    try{ const res = await storageSet(CONTACT_STORAGE_KEY, JSON.stringify(contacts)); if(!res){ toast('Save failed — try again'); } }
+    catch(e){ toast('Save failed — try again'); }
+  }
+  function artistsManagedBy(contactId){
+    return artists.filter(function(a){ return a.managerContactId === contactId; });
+  }
 
   // ===== Generic entity helpers (artist / writer / publisher / label) =====
   function entityArray(type){
@@ -554,6 +569,7 @@
     try{ const r = await storageGet(WRITER_STORAGE_KEY); writers = r && r.value ? JSON.parse(r.value) : []; }catch(e){ writers = []; }
     try{ const r = await storageGet(PUBLISHER_STORAGE_KEY); publishers = r && r.value ? JSON.parse(r.value) : []; }catch(e){ publishers = []; }
     try{ const r = await storageGet(LABEL_STORAGE_KEY); labels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ labels = []; }
+    try{ const r = await storageGet(CONTACT_STORAGE_KEY); contacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ contacts = []; }
     entries.forEach(normalize);
     loaded = true;
     render();
@@ -625,6 +641,7 @@
     tabArtists.classList.toggle('active', (view==='entityIndex' && entityIndexType==='artist') || (view==='entityFilter' && entityFilterType==='artist'));
     tabPublishers.classList.toggle('active', (view==='entityIndex' && entityIndexType==='publisher') || (view==='entityFilter' && entityFilterType==='publisher'));
     tabLabels.classList.toggle('active', (view==='entityIndex' && entityIndexType==='label') || (view==='entityFilter' && entityFilterType==='label'));
+    tabContacts.classList.toggle('active', view==='contacts' || view==='contactDetail');
     tabTags.classList.toggle('active', view==='tags' || view==='tagFilter');
     tabAlbums.classList.toggle('active', view==='albums' || view==='albumFilter');
     tabStats.classList.toggle('active', view==='stats');
@@ -640,6 +657,8 @@
     if(view === 'tagFilter'){ renderTagFilter(q); return; }
     if(view === 'albums'){ renderAlbums(); return; }
     if(view === 'albumFilter'){ renderAlbumFilter(q); return; }
+    if(view === 'contacts'){ renderContacts(); return; }
+    if(view === 'contactDetail'){ renderContactDetail(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -741,11 +760,14 @@
     let html = '<button class="back-link" id="backToEntity">\u2190 All ' + meta.label.toLowerCase() + 's</button>';
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + '</div>' +
+      (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + '</div>' : '') +
+      (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy) ? '<div class="publisher">Administered / sub-published by <button data-entity-type="publisher" data-entity-id="'+esc(ent.administeredBy)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('publisher', ent.administeredBy).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
+      (type==='artist' && ent.managerContactId && findContactById(ent.managerContactId) ? '<div class="publisher">Manager: <button data-open-contact="'+esc(ent.managerContactId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findContactById(ent.managerContactId).name)+'</button></div>' : '') +
       (ent.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(ent.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
         '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a>' +
         '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>' +
-        (type==='writer' || type==='publisher' ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a>' : '') +
+        (type==='writer' || type==='publisher' ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + mlcUrl() + '">MLC Search \u2197</a>' : '') +
         '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
       '</div>' +
@@ -771,6 +793,17 @@
       toast(meta.label + ' deleted');
       view = 'entityIndex'; entityIndexType = type; render();
     });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(ev){
+        ev.preventDefault();
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+    mainEl.querySelectorAll('[data-open-contact]').forEach(function(el){
+      el.addEventListener('click', function(){ contactDetailId = el.getAttribute('data-open-contact'); view='contactDetail'; render(); });
+    });
     attachCardHandlers();
   }
 
@@ -779,10 +812,40 @@
     const ent = id ? findEntityById(type, id) : null;
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
+    const showIpi = (type==='writer' || type==='publisher');
+    const showAdmin = (type==='publisher');
+    const showManager = (type==='artist');
+    let extraFields = '';
+    if(showIpi){
+      extraFields += '<div class="field"><label>IPI number (optional)</label><input id="ent-ipi" type="text" value="' + (ent?esc(ent.ipi||''):'') + '" placeholder="e.g. 00123456789"><div class="hint">Look it up on the MLC\u2019s free public search if you don\u2019t have it handy.</div></div>';
+    }
+    if(showAdmin){
+      const otherPubs = publishers.filter(function(p){ return !ent || p.id!==ent.id; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+      extraFields += '<div class="field-row">' +
+        '<div class="field"><label>Administered / sub-published by (optional)</label><select id="ent-admin"><option value="">\u2014 None \u2014</option>' +
+          otherPubs.map(function(p){ return '<option value="'+esc(p.id)+'"'+(ent && ent.administeredBy===p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('') +
+        '</select></div>' +
+        '<div class="field"><label>Territory (optional)</label><input id="ent-territory" type="text" value="'+(ent?esc(ent.administeredTerritory||''):'')+'" placeholder="e.g. UK &amp; Europe"></div>' +
+      '</div>';
+    }
+    if(showManager){
+      extraFields += '<div class="field"><label>Manager / contact (optional)</label><select id="ent-manager"><option value="">\u2014 None \u2014</option>' +
+        contacts.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
+          return '<option value="'+esc(c.id)+'"'+(ent && ent.managerContactId===c.id?' selected':'')+'>'+esc(c.name)+(c.company?' \u2014 '+esc(c.company):'')+'</option>';
+        }).join('') +
+        '<option value="__new__">+ New contact</option>' +
+      '</select></div>' +
+      '<div class="lookup-box" id="newContactBox" style="display:none;">' +
+        '<div class="lookup-title">New contact</div>' +
+        '<div class="field" style="margin-bottom:8px;"><input id="nc-name" type="text" placeholder="Name"></div>' +
+        '<div class="field-row"><div class="field" style="margin-bottom:0;"><input id="nc-role" type="text" placeholder="Role (e.g. Manager)"></div><div class="field" style="margin-bottom:0;"><input id="nc-company" type="text" placeholder="Company"></div></div>' +
+      '</div>';
+    }
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (ent ? 'Edit ' + meta.label.toLowerCase() : 'New ' + meta.label.toLowerCase()) + '</h2>' +
         '<div class="field"><label>Name</label><input id="ent-name" type="text" value="' + (ent?esc(ent.name):'') + '" placeholder="' + meta.label + ' name"></div>' +
+        extraFields +
         '<div class="field"><label>Notes (optional)</label><textarea id="ent-notes" placeholder="Anything worth remembering…">' + (ent?esc(ent.notes||''):'') + '</textarea></div>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-ghost" id="entCancelBtn" type="button">Cancel</button>' +
@@ -792,18 +855,155 @@
     document.body.appendChild(overlay);
     overlay.querySelector('#entCancelBtn').addEventListener('click', function(){ overlay.remove(); });
     overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(showManager){
+      const mgrSelect = overlay.querySelector('#ent-manager');
+      const newContactBox = overlay.querySelector('#newContactBox');
+      mgrSelect.addEventListener('change', function(){ newContactBox.style.display = (mgrSelect.value==='__new__') ? 'block' : 'none'; });
+    }
     overlay.querySelector('#entSaveBtn').addEventListener('click', async function(){
       const name = overlay.querySelector('#ent-name').value.trim();
       const notes = overlay.querySelector('#ent-notes').value.trim();
       if(!name){ toast('Give it a name first'); return; }
-      if(ent){ ent.name = name; ent.notes = notes; }
-      else { entityArray(type).push({ id: type.slice(0,2)+Date.now()+Math.random().toString(36).slice(2,7), name: name, notes: notes }); }
+      const extra = {};
+      if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); }
+      if(showAdmin){
+        extra.administeredBy = overlay.querySelector('#ent-admin').value;
+        extra.administeredTerritory = overlay.querySelector('#ent-territory').value.trim();
+      }
+      let contactsChanged = false;
+      if(showManager){
+        let mgrId = overlay.querySelector('#ent-manager').value;
+        if(mgrId === '__new__'){
+          const ncName = overlay.querySelector('#nc-name').value.trim();
+          if(ncName){
+            const newContact = { id:'ct'+Date.now()+Math.random().toString(36).slice(2,7), name: ncName, role: overlay.querySelector('#nc-role').value.trim(), company: overlay.querySelector('#nc-company').value.trim(), email:'', notes:'' };
+            contacts.push(newContact); mgrId = newContact.id; contactsChanged = true;
+          } else { mgrId = ''; }
+        }
+        extra.managerContactId = mgrId;
+      }
+      if(ent){ Object.assign(ent, {name, notes}, extra); }
+      else { entityArray(type).push(Object.assign({ id: type.slice(0,2)+Date.now()+Math.random().toString(36).slice(2,7), name: name, notes: notes }, extra)); }
       overlay.remove();
+      if(contactsChanged){ await saveContacts(); }
       await saveEntityArray(type);
       toast(ent ? meta.label+' updated' : meta.label+' created');
       render();
     });
     setTimeout(function(){ overlay.querySelector('#ent-name').focus(); }, 30);
+  }
+
+  function renderContacts(){
+    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newContactBtn" type="button">+ New contact</button></div>';
+    if(contacts.length===0){
+      html += '<div class="empty"><strong>No contacts yet</strong>Add A&amp;Rs, managers, agents \u2014 anyone in your industry network.</div>';
+      mainEl.innerHTML = html;
+      document.getElementById('newContactBtn').addEventListener('click', function(){ openContactModal(null); });
+      return;
+    }
+    const rows = contacts.slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
+    html += '<div class="writer-index">' + rows.map(function(c){
+      return '<div class="writer-row" data-contact-row="' + esc(c.id) + '">' +
+        '<div class="writer-name">' + esc(c.name) + '</div>' +
+        '<div class="writer-count">' + esc(c.role||'') + '</div>' +
+        '<div class="writer-songs">' + esc(c.company||'') + '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+    mainEl.innerHTML = html;
+    document.getElementById('newContactBtn').addEventListener('click', function(){ openContactModal(null); });
+    mainEl.querySelectorAll('[data-contact-row]').forEach(function(row){
+      row.addEventListener('click', function(){ contactDetailId = row.getAttribute('data-contact-row'); view='contactDetail'; render(); });
+    });
+  }
+
+  function renderContactDetail(){
+    const c = findContactById(contactDetailId);
+    if(!c){ view='contacts'; render(); return; }
+    const managed = artistsManagedBy(c.id);
+    let html = '<button class="back-link" id="backToContacts">\u2190 All contacts</button>';
+    html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div class="song-title" style="font-size:22px;">' + esc(c.name) + '</div>' +
+      '<div class="artist" style="margin-top:4px;">' + esc(c.role||'') + (c.company?' \u00b7 '+esc(c.company):'') + '</div>' +
+      (c.email ? '<div class="publisher">Email: ' + esc(c.email) + '</div>' : '') +
+      (c.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(c.notes) + '</div>' : '') +
+      '<div style="margin-top:10px; display:flex; gap:8px;">' +
+        '<button class="icon-btn" id="editContactBtn" type="button">edit</button>' +
+        '<button class="icon-btn" id="deleteContactBtn" type="button">delete</button>' +
+      '</div>' +
+    '</div>';
+    if(managed.length){
+      html += '<div class="filter-banner">Manages ' + managed.length + ' artist' + (managed.length===1?'':'s') + '</div>';
+      html += '<div class="chip-row" style="margin-bottom:20px;">' + managed.map(function(a){
+        return '<button class="chip" data-entity-type="artist" data-entity-id="'+esc(a.id)+'">'+esc(a.name)+'</button>';
+      }).join('') + '</div>';
+    }
+    mainEl.innerHTML = html;
+    document.getElementById('backToContacts').addEventListener('click', function(){ view='contacts'; render(); });
+    document.getElementById('editContactBtn').addEventListener('click', function(){ openContactModal(c.id); });
+    document.getElementById('deleteContactBtn').addEventListener('click', async function(){
+      if(!confirm('Delete "' + c.name + '"? Any artist they manage will just lose that link.')) return;
+      contacts = contacts.filter(function(x){ return x.id!==c.id; });
+      artists.forEach(function(a){ if(a.managerContactId===c.id) a.managerContactId=''; });
+      await saveContacts(); await saveEntityArray('artist');
+      toast('Contact deleted'); view='contacts'; render();
+    });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+  }
+
+  function openContactModal(id){
+    const c = id ? findContactById(id) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (c ? 'Edit contact' : 'New contact') + '</h2>' +
+        '<div class="field"><label>Name</label><input id="ct-name" type="text" value="' + (c?esc(c.name):'') + '" placeholder="Full name"></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Role</label><input id="ct-role" type="text" value="' + (c?esc(c.role||''):'') + '" placeholder="e.g. A&amp;R, Manager, Agent"></div>' +
+          '<div class="field"><label>Company</label><input id="ct-company" type="text" value="' + (c?esc(c.company||''):'') + '" placeholder="e.g. Mezz Entertainment"></div>' +
+        '</div>' +
+        '<div class="field"><label>Email (optional)</label><input id="ct-email" type="text" value="' + (c?esc(c.email||''):'') + '" placeholder="name@company.com"></div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="ct-notes">' + (c?esc(c.notes||''):'') + '</textarea></div>' +
+        '<div class="modal-actions">' +
+          (c ? '<button class="btn btn-danger" id="ctDeleteBtn" type="button">Delete</button>' : '') +
+          '<button class="btn btn-ghost" id="ctCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="ctSaveBtn" type="button">' + (c ? 'Save changes' : 'Create') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#ctCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(c){
+      overlay.querySelector('#ctDeleteBtn').addEventListener('click', async function(){
+        if(!confirm('Delete "' + c.name + '"?')) return;
+        contacts = contacts.filter(function(x){ return x.id!==c.id; });
+        artists.forEach(function(a){ if(a.managerContactId===c.id) a.managerContactId=''; });
+        overlay.remove();
+        await saveContacts(); await saveEntityArray('artist');
+        toast('Contact deleted'); view='contacts'; render();
+      });
+    }
+    overlay.querySelector('#ctSaveBtn').addEventListener('click', async function(){
+      const name = overlay.querySelector('#ct-name').value.trim();
+      const role = overlay.querySelector('#ct-role').value.trim();
+      const company = overlay.querySelector('#ct-company').value.trim();
+      const email = overlay.querySelector('#ct-email').value.trim();
+      const notes = overlay.querySelector('#ct-notes').value.trim();
+      if(!name){ toast('Give them a name first'); return; }
+      if(c){ Object.assign(c, {name, role, company, email, notes}); }
+      else { contacts.push({ id:'ct'+Date.now()+Math.random().toString(36).slice(2,7), name, role, company, email, notes }); }
+      overlay.remove();
+      await saveContacts();
+      toast(c ? 'Contact updated' : 'Contact created');
+      render();
+    });
+    setTimeout(function(){ overlay.querySelector('#ct-name').focus(); }, 30);
   }
 
   function renderTags(){
@@ -1300,6 +1500,7 @@
   tabArtists.addEventListener('click', function(){ view='entityIndex'; entityIndexType='artist'; render(); });
   tabPublishers.addEventListener('click', function(){ view='entityIndex'; entityIndexType='publisher'; render(); });
   tabLabels.addEventListener('click', function(){ view='entityIndex'; entityIndexType='label'; render(); });
+  tabContacts.addEventListener('click', function(){ view='contacts'; render(); });
   tabTags.addEventListener('click', function(){ view='tags'; render(); });
   tabAlbums.addEventListener('click', function(){ view='albums'; render(); });
   tabStats.addEventListener('click', function(){ view='stats'; render(); });
