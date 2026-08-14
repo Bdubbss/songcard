@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>SONGCARD — Credit Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ============================================================ -->
 <!-- STEP: PASTE YOUR FIREBASE CONFIG BELOW, BETWEEN THE {} BRACKETS -->
@@ -26,318 +25,138 @@
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --kraft:#e8e0cd;
-    --kraft-deep:#d8cbac;
-    --card:#f8f4e6;
-    --ink:#211d18;
-    --ink-soft:#5c5346;
-    --brown:#8a5a34;
-    --brown-deep:#6b4526;
-    --stamp:#a13b2e;
-    --teal:#33625a;
-    --gold:#b8873f;
-    --line: rgba(33,29,24,0.16);
+    --kraft:#e8e0cd; --kraft-deep:#d8cbac; --card:#f8f4e6;
+    --ink:#211d18; --ink-soft:#5c5346; --brown:#8a5a34; --brown-deep:#6b4526;
+    --stamp:#a13b2e; --teal:#33625a; --gold:#b8873f; --line: rgba(33,29,24,0.16);
     --radius: 3px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background:
-      radial-gradient(ellipse at top left, rgba(255,255,255,0.35), transparent 60%),
-      var(--kraft);
-    color:var(--ink);
-    font-family:'Inter',sans-serif;
-    min-height:100vh;
-    -webkit-font-smoothing:antialiased;
+    background: radial-gradient(ellipse at top left, rgba(255,255,255,0.35), transparent 60%), var(--kraft);
+    color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;
   }
   body::before{
-    content:"";
-    position:fixed; inset:0;
-    pointer-events:none;
-    opacity:0.05;
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:0.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    mix-blend-mode:multiply;
-    z-index:0;
+    mix-blend-mode:multiply; z-index:0;
   }
-
-  header{
-    position:relative; z-index:1;
-    padding:28px 20px 18px;
-    max-width:1120px; margin:0 auto;
-  }
-  .masthead{
-    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px;
-    border-bottom:3px solid var(--ink);
-    padding-bottom:10px;
-  }
-  .brand{
-    font-family:'Roboto Slab',serif; font-weight:900;
-    font-size:clamp(28px,5vw,42px);
-    letter-spacing:0.5px;
-    display:flex; align-items:baseline; gap:10px;
-  }
-  .brand .card-icon{
-    display:inline-block; width:0.62em; height:0.8em;
-    border:2px solid var(--ink); border-radius:1px;
-    position:relative; top:0.04em;
-    background:
-      linear-gradient(var(--ink) 0 0) 12% 30%/76% 2px no-repeat,
-      linear-gradient(var(--ink) 0 0) 12% 52%/50% 2px no-repeat;
-  }
-  .tagline{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.08em;
-    color:var(--ink-soft); text-transform:uppercase;
-  }
-  .stats-row{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft);
-    margin-top:8px; letter-spacing:0.03em;
-  }
-
-  .controls{
-    position:relative; z-index:1;
-    max-width:1120px; margin:0 auto; padding:0 20px 10px;
-    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-  }
-  .search-wrap{
-    flex:1 1 220px; position:relative;
-  }
-  .search-wrap input{
-    width:100%; padding:11px 14px 11px 34px;
-    border:1.5px solid var(--ink); border-radius:var(--radius);
-    background:var(--card);
-    font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);
-  }
+  header{position:relative; z-index:1; padding:28px 20px 18px; max-width:1120px; margin:0 auto;}
+  .masthead{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom:3px solid var(--ink); padding-bottom:10px;}
+  .brand{font-family:'Roboto Slab',serif; font-weight:900; font-size:clamp(28px,5vw,42px); letter-spacing:0.5px; display:flex; align-items:baseline; gap:10px;}
+  .brand .card-icon{display:inline-block; width:0.62em; height:0.8em; border:2px solid var(--ink); border-radius:1px; position:relative; top:0.04em;
+    background: linear-gradient(var(--ink) 0 0) 12% 30%/76% 2px no-repeat, linear-gradient(var(--ink) 0 0) 12% 52%/50% 2px no-repeat;}
+  .tagline{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.08em; color:var(--ink-soft); text-transform:uppercase;}
+  .stats-row{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-top:8px; letter-spacing:0.03em;}
+  .controls{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 20px 10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .search-wrap{flex:1 1 220px; position:relative;}
+  .search-wrap input{width:100%; padding:11px 14px 11px 34px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);}
   .search-wrap input:focus{outline:2px solid var(--teal); outline-offset:1px;}
   .search-wrap svg{position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.55;}
-
-  select#sortSelect{
-    font-family:'IBM Plex Mono',monospace; font-size:12px;
-    padding:10px 10px; border:1.5px solid var(--ink); border-radius:var(--radius);
-    background:var(--card); color:var(--ink);
-  }
-
-  .tabbtn{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.04em;
-    padding:10px 14px; border:1.5px solid var(--ink); border-radius:var(--radius);
-    background:transparent; color:var(--ink); cursor:pointer; text-transform:uppercase;
-  }
+  select#sortSelect{font-family:'IBM Plex Mono',monospace; font-size:12px; padding:10px 10px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); color:var(--ink);}
+  .tabbtn{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.04em; padding:10px 14px; border:1.5px solid var(--ink); border-radius:var(--radius); background:transparent; color:var(--ink); cursor:pointer; text-transform:uppercase;}
   .tabbtn.active{background:var(--ink); color:var(--card);}
   .tabbtn.toggle-on{background:var(--teal); color:#fbf6e9; border-color:var(--teal);}
   .tabbtn.toggle-on.priority-on{background:var(--stamp); border-color:var(--stamp);}
-  .tabbtn:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{
-    outline:2px solid var(--teal); outline-offset:2px;
-  }
-
-  .btn-add{
-    margin-left:auto;
-    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;
-    padding:11px 18px; border-radius:var(--radius); border:1.5px solid var(--ink);
-    background:var(--stamp); color:#fbf6e9; cursor:pointer; letter-spacing:0.03em;
-  }
+  .tabbtn:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
+  .btn-add{margin-left:auto; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px; padding:11px 18px; border-radius:var(--radius); border:1.5px solid var(--ink); background:var(--stamp); color:#fbf6e9; cursor:pointer; letter-spacing:0.03em;}
   .btn-add:hover{background:#8b2f24;}
-
   main{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:14px 20px 80px;}
-
-  .empty{
-    border:1.5px dashed var(--ink-soft); border-radius:var(--radius);
-    padding:48px 20px; text-align:center; color:var(--ink-soft);
-    font-family:'IBM Plex Mono',monospace; font-size:13px;
-  }
+  .empty{border:1.5px dashed var(--ink-soft); border-radius:var(--radius); padding:48px 20px; text-align:center; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:13px;}
   .empty strong{display:block; font-family:'Roboto Slab',serif; font-size:20px; color:var(--ink); margin-bottom:6px;}
-
-  .grid{
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:22px 18px;
-    margin-top:18px;
-  }
-  .card{
-    background:var(--card);
-    border:1.5px solid var(--ink);
-    border-radius:var(--radius);
-    position:relative;
-    box-shadow:3px 3px 0 rgba(33,29,24,0.14);
-    padding:20px 16px 16px;
-    display:flex; flex-direction:column; gap:9px;
-  }
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:22px 18px; margin-top:18px;}
+  .card{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); position:relative; box-shadow:3px 3px 0 rgba(33,29,24,0.14); padding:20px 16px 16px; display:flex; flex-direction:column; gap:9px;}
   .card.is-priority{border-color:var(--stamp); box-shadow:3px 3px 0 rgba(161,59,46,0.28);}
-  .card .tab{
-    position:absolute; top:-13px; left:16px;
-    background:var(--brown); color:#fbf6e9;
-    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em;
-    padding:3px 9px; border-radius:2px; border:1.5px solid var(--ink);
-  }
-  .punch{
-    position:absolute; top:9px; right:14px;
-    width:8px; height:8px; border-radius:50%;
-    background:var(--kraft); border:1px solid var(--line);
-  }
+  .card .tab{position:absolute; top:-13px; left:16px; background:var(--brown); color:#fbf6e9; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; padding:3px 9px; border-radius:2px; border:1.5px solid var(--ink);}
+  .punch{position:absolute; top:9px; right:14px; width:8px; height:8px; border-radius:50%; background:var(--kraft); border:1px solid var(--line);}
   .flag-row{position:absolute; top:5px; right:26px; display:flex; gap:5px; flex-direction:column; align-items:flex-end;}
-  .stamp-mark{
-    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:9px;
-    border-radius:3px; padding:2px 6px; transform:rotate(6deg); letter-spacing:0.05em;
-    white-space:nowrap;
-  }
+  .stamp-mark{font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:9px; border-radius:3px; padding:2px 6px; transform:rotate(6deg); letter-spacing:0.05em; white-space:nowrap;}
   .stamp-revisit{color:var(--teal); border:1.5px solid var(--teal);}
   .stamp-priority{color:var(--stamp); border:1.5px solid var(--stamp); transform:rotate(-4deg); background:rgba(161,59,46,0.06);}
-  .song-title{
-    font-family:'Roboto Slab',serif; font-weight:700; font-size:19px; line-height:1.2;
-    margin-top:6px; padding-right:6px;
-  }
-  .artist{
-    font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-soft);
-    text-transform:uppercase; letter-spacing:0.04em;
-  }
+  .song-title{font-family:'Roboto Slab',serif; font-weight:700; font-size:19px; line-height:1.2; margin-top:6px; padding-right:6px;}
+  .artist{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; background:none; border:none; padding:0; text-align:left; cursor:pointer;}
+  .artist:hover{color:var(--brown-deep); text-decoration:underline;}
   .publisher{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
+  .publisher button{background:none; border:none; font-family:inherit; font-size:inherit; color:var(--teal); cursor:pointer; padding:0; text-decoration:underline;}
   .stars{color:var(--gold); font-size:15px; letter-spacing:1px;}
   .divider{border:none; border-top:1px dashed var(--line); margin:2px 0;}
   .writers-label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.1em; color:var(--ink-soft); text-transform:uppercase;}
   .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
-  .chip{
-    font-family:'IBM Plex Mono',monospace; font-size:11.5px;
-    background:transparent; border:1px solid var(--brown); color:var(--brown-deep);
-    padding:3px 8px; border-radius:12px; cursor:pointer;
-  }
+  .chip{font-family:'IBM Plex Mono',monospace; font-size:11.5px; background:transparent; border:1px solid var(--brown); color:var(--brown-deep); padding:3px 8px; border-radius:12px; cursor:pointer;}
   .chip:hover{background:var(--brown); color:#fbf6e9;}
   .chip-tag{border-color:var(--teal); color:var(--teal);}
   .chip-tag:hover{background:var(--teal); color:#fbf6e9;}
-  .thoughts{
-    font-size:13.5px; line-height:1.45; color:var(--ink);
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
-  }
+  .chip-pub{border-style:dashed; font-size:10.5px;}
+  .thoughts{font-size:13.5px; line-height:1.45; color:var(--ink); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
   .thoughts.empty-thought{color:var(--ink-soft); font-style:italic;}
-  .card-foot{
-    margin-top:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-    padding-top:6px;
-  }
-  .link-btn{
-    font-family:'IBM Plex Mono',monospace; font-size:11px;
-    border:1px solid var(--teal); color:var(--teal); background:transparent;
-    padding:4px 8px; border-radius:2px; text-decoration:none; cursor:pointer;
-  }
+  .card-foot{margin-top:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:6px;}
+  .link-btn{font-family:'IBM Plex Mono',monospace; font-size:11px; border:1px solid var(--teal); color:var(--teal); background:transparent; padding:4px 8px; border-radius:2px; text-decoration:none; cursor:pointer;}
   .link-btn:hover{background:var(--teal); color:#fbf6e9;}
-  .icon-btn{
-    background:none; border:none; color:var(--ink-soft); cursor:pointer;
-    font-family:'IBM Plex Mono',monospace; font-size:11px; text-decoration:underline;
-  }
+  .icon-btn{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px; text-decoration:underline;}
   .icon-btn:hover{color:var(--stamp);}
   .icon-btn.push-right{margin-left:auto;}
-
   .writer-index{margin-top:18px; display:flex; flex-direction:column; gap:0;}
-  .writer-row{
-    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-    padding:14px 4px; border-bottom:1px solid var(--line); cursor:pointer;
-  }
+  .writer-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 4px; border-bottom:1px solid var(--line); cursor:pointer;}
   .writer-row:hover{background:rgba(138,90,52,0.07);}
   .writer-row.tag-row:hover{background:rgba(51,98,90,0.08);}
   .writer-name{font-family:'Roboto Slab',serif; font-weight:700; font-size:17px; min-width:180px;}
   .writer-count{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft);}
   .writer-songs{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); flex:1;}
   .writer-links{display:flex; gap:6px;}
-
-  .back-link{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal);
-    background:none; border:none; cursor:pointer; text-decoration:underline; padding:0; margin-bottom:10px;
-  }
-  .filter-banner{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-bottom:6px;
-  }
-
-  .stats-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-top:18px;}
-  .stat-tile{
-    background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius);
-    padding:16px; box-shadow:3px 3px 0 rgba(33,29,24,0.14);
-  }
+  .back-link{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal); background:none; border:none; cursor:pointer; text-decoration:underline; padding:0; margin-bottom:10px;}
+  .filter-banner{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-bottom:6px;}
+  .stats-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-top:18px;}
+  .stat-tile{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); padding:16px; box-shadow:3px 3px 0 rgba(33,29,24,0.14);}
   .stat-num{font-family:'Roboto Slab',serif; font-weight:900; font-size:32px; line-height:1;}
   .stat-label{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); text-transform:uppercase; margin-top:4px; letter-spacing:0.05em;}
   .stats-section{margin-top:26px;}
   .stats-section h3{font-family:'Roboto Slab',serif; font-size:16px; border-bottom:2px solid var(--ink); padding-bottom:6px; margin-bottom:10px;}
   .rank-row{display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 2px; border-bottom:1px dashed var(--line);}
-
-  .overlay{
-    position:fixed; inset:0; background:rgba(33,29,24,0.55); z-index:10;
-    display:flex; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;
-  }
-  .modal{
-    background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius);
-    max-width:500px; width:100%; padding:24px; box-shadow:5px 5px 0 rgba(33,29,24,0.25);
-    margin:auto;
-  }
+  .overlay{position:fixed; inset:0; background:rgba(33,29,24,0.55); z-index:10; display:flex; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;}
+  .modal{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); max-width:520px; width:100%; padding:24px; box-shadow:5px 5px 0 rgba(33,29,24,0.25); margin:auto;}
   .modal h2{font-family:'Roboto Slab',serif; font-size:22px; margin:0 0 4px;}
   .modal .sub{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-bottom:18px; text-transform:uppercase; letter-spacing:0.06em;}
   .field{margin-bottom:14px;}
   .field-row{display:flex; gap:10px;}
   .field-row .field{flex:1;}
-  .field label{
-    display:block; font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase;
-    letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:5px;
-  }
-  .field input, .field textarea{
-    width:100%; padding:9px 10px; border:1.5px solid var(--ink); border-radius:2px;
-    font-family:'Inter',sans-serif; font-size:14px; background:#fffdf7; color:var(--ink);
-  }
+  .field label{display:block; font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:5px;}
+  .field input, .field textarea{width:100%; padding:9px 10px; border:1.5px solid var(--ink); border-radius:2px; font-family:'Inter',sans-serif; font-size:14px; background:#fffdf7; color:var(--ink);}
   .field textarea{resize:vertical; min-height:64px; font-family:'Inter',sans-serif;}
   .field .hint{font-size:11px; color:var(--ink-soft); margin-top:4px; font-family:'IBM Plex Mono',monospace;}
-  .lookup-box{
-    border:1.5px dashed var(--brown); border-radius:2px; padding:12px; margin-bottom:16px;
-    background:rgba(138,90,52,0.05);
-  }
+  .lookup-box{border:1.5px dashed var(--brown); border-radius:2px; padding:12px; margin-bottom:16px; background:rgba(138,90,52,0.05);}
   .lookup-box .lookup-title{font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brown-deep); margin-bottom:8px;}
   .lookup-row{display:flex; gap:8px; align-items:stretch; margin-bottom:8px; flex-wrap:wrap;}
   .lookup-row input{flex:1; min-width:120px; padding:8px 9px; border:1.5px solid var(--ink); border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:13px; background:#fffdf7;}
-  .lookup-btn{
-    font-family:'IBM Plex Mono',monospace; font-size:11.5px; white-space:nowrap;
-    border:1.5px solid var(--brown); background:transparent; color:var(--brown-deep);
-    padding:8px 10px; border-radius:2px; cursor:pointer;
-  }
+  .lookup-btn{font-family:'IBM Plex Mono',monospace; font-size:11.5px; white-space:nowrap; border:1.5px solid var(--brown); background:transparent; color:var(--brown-deep); padding:8px 10px; border-radius:2px; cursor:pointer;}
   .lookup-btn:hover{background:var(--brown); color:#fbf6e9;}
   .lookup-btn:disabled{opacity:0.5; cursor:default;}
   .lookup-status{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); min-height:14px;}
+  .credit-row{display:flex; gap:6px; margin-bottom:8px; align-items:center; flex-wrap:wrap;}
+  .credit-row input{flex:1 1 140px; padding:8px 9px; border:1.5px solid var(--ink); border-radius:2px; font-family:'Inter',sans-serif; font-size:13px; background:#fffdf7;}
+  .credit-remove{background:none; border:1.5px solid var(--stamp); color:var(--stamp); border-radius:2px; width:30px; height:34px; cursor:pointer; font-size:15px; line-height:1;}
+  .add-credit-btn{font-family:'IBM Plex Mono',monospace; font-size:12px; border:1px dashed var(--brown); color:var(--brown-deep); background:transparent; padding:7px 10px; border-radius:2px; cursor:pointer;}
   .star-picker{display:flex; gap:4px;}
-  .star-picker button{
-    background:none; border:none; font-size:24px; cursor:pointer; color:var(--line); padding:0; line-height:1;
-  }
+  .star-picker button{background:none; border:none; font-size:24px; cursor:pointer; color:var(--line); padding:0; line-height:1;}
   .star-picker button.filled{color:var(--gold);}
   .flag-toggles{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
-  .like-toggle{
-    display:flex; align-items:center; gap:8px;
-    font-family:'IBM Plex Mono',monospace; font-size:13px;
-  }
-  .like-toggle button{
-    border:1.5px solid var(--teal); background:transparent; color:var(--teal);
-    padding:6px 12px; border-radius:2px; cursor:pointer; font-family:inherit; font-weight:600;
-  }
+  .like-toggle{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:13px;}
+  .like-toggle button{border:1.5px solid var(--teal); background:transparent; color:var(--teal); padding:6px 12px; border-radius:2px; cursor:pointer; font-family:inherit; font-weight:600;}
   .like-toggle button.on{background:var(--teal); color:#fbf6e9;}
   .like-toggle.priority button{border-color:var(--stamp); color:var(--stamp);}
   .like-toggle.priority button.on{background:var(--stamp); color:#fbf6e9;}
   .modal-actions{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;}
-  .btn{
-    font-family:'IBM Plex Mono',monospace; font-size:13px; padding:10px 16px;
-    border-radius:2px; cursor:pointer; border:1.5px solid var(--ink);
-  }
+  .btn{font-family:'IBM Plex Mono',monospace; font-size:13px; padding:10px 16px; border-radius:2px; cursor:pointer; border:1.5px solid var(--ink);}
   .btn-primary{background:var(--ink); color:var(--card); flex:1;}
   .btn-ghost{background:transparent; color:var(--ink);}
   .btn-danger{border-color:var(--stamp); color:var(--stamp); background:transparent;}
-
-  .toast{
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    background:var(--ink); color:var(--card); font-family:'IBM Plex Mono',monospace; font-size:12px;
-    padding:9px 16px; border-radius:3px; z-index:20; opacity:0; pointer-events:none; transition:opacity 0.25s;
-    max-width:90vw; text-align:center;
-  }
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--card); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:9px 16px; border-radius:3px; z-index:20; opacity:0; pointer-events:none; transition:opacity 0.25s; max-width:90vw; text-align:center;}
   .toast.show{opacity:1;}
-
-  footer{
-    position:relative; z-index:1; text-align:center; padding:20px;
-    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);
-  }
+  footer{position:relative; z-index:1; text-align:center; padding:20px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
   footer button{background:none; border:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:11px;}
-
-  @media (max-width:520px){
-    .writer-row{flex-direction:column; align-items:flex-start; gap:4px;}
-    .writer-name{min-width:auto;}
-    .field-row{flex-direction:column;}
-  }
+  @media (max-width:520px){ .writer-row{flex-direction:column; align-items:flex-start; gap:4px;} .writer-name{min-width:auto;} .field-row{flex-direction:column;} }
   @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
 </style>
 </head>
@@ -354,7 +173,7 @@
 <div class="controls">
   <div class="search-wrap">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-    <input id="searchInput" type="text" placeholder="Search song, artist, writer, tag, or notes…">
+    <input id="searchInput" type="text" placeholder="Search everything…">
   </div>
   <select id="sortSelect">
     <option value="new">Newest first</option>
@@ -362,10 +181,13 @@
     <option value="rating">Highest rated</option>
     <option value="az">A–Z (song)</option>
   </select>
-  <button class="tabbtn" id="priorityToggle" type="button">🔥 Priority only</button>
-  <button class="tabbtn" id="revisitToggle" type="button">⏱ Revisit only</button>
+  <button class="tabbtn" id="priorityToggle" type="button">Priority only</button>
+  <button class="tabbtn" id="revisitToggle" type="button">Revisit only</button>
   <button class="tabbtn active" id="tabSongs" type="button">Songs</button>
   <button class="tabbtn" id="tabWriters" type="button">Writers</button>
+  <button class="tabbtn" id="tabArtists" type="button">Artists</button>
+  <button class="tabbtn" id="tabPublishers" type="button">Publishers</button>
+  <button class="tabbtn" id="tabLabels" type="button">Labels</button>
   <button class="tabbtn" id="tabTags" type="button">Tags</button>
   <button class="tabbtn" id="tabAlbums" type="button">Albums</button>
   <button class="tabbtn" id="tabStats" type="button">Stats</button>
@@ -394,30 +216,59 @@
 
 <script>
 (function(){
-  const STORAGE_KEY = 'song_entries_v2';
-  const OLD_STORAGE_KEY = 'song_entries_v1';
+  const STORAGE_KEY = 'song_entries_v3';
+  const OLD_STORAGE_KEY = 'song_entries_v2';
   const ALBUM_STORAGE_KEY = 'song_albums_v1';
+  const ARTIST_STORAGE_KEY = 'song_artists_v1';
+  const WRITER_STORAGE_KEY = 'song_writers_v1';
+  const PUBLISHER_STORAGE_KEY = 'song_publishers_v1';
+  const LABEL_STORAGE_KEY = 'song_labels_v1';
+
   let entries = [];
   let albums = [];
+  let artists = [];
+  let writers = [];
+  let publishers = [];
+  let labels = [];
   let loaded = false;
-  let view = 'songs'; // 'songs' | 'writers' | 'writerFilter' | 'tags' | 'tagFilter' | 'albums' | 'albumFilter' | 'stats'
-  let writerFilter = null;
+  let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
   let albumFilterId = null;
+  let entityIndexType = null;   // 'writer' | 'artist' | 'publisher' | 'label'
+  let entityFilterType = null;
+  let entityFilterId = null;
   let revisitOnly = false;
   let priorityOnly = false;
   let sortMode = 'new';
+
+  const ENTITY_META = {
+    writer:    { label: 'Writer',    tab: 'tabWriters' },
+    artist:    { label: 'Artist',    tab: 'tabArtists' },
+    publisher: { label: 'Publisher', tab: 'tabPublishers' },
+    label:     { label: 'Label',     tab: 'tabLabels' }
+  };
+
+  const mainEl = document.getElementById('main');
+  const statsRow = document.getElementById('statsRow');
+  const searchInput = document.getElementById('searchInput');
+  const sortSelect = document.getElementById('sortSelect');
+  const tabSongs = document.getElementById('tabSongs');
+  const tabWriters = document.getElementById('tabWriters');
+  const tabArtists = document.getElementById('tabArtists');
+  const tabPublishers = document.getElementById('tabPublishers');
+  const tabLabels = document.getElementById('tabLabels');
+  const tabTags = document.getElementById('tabTags');
+  const tabAlbums = document.getElementById('tabAlbums');
+  const tabStats = document.getElementById('tabStats');
+  const revisitToggle = document.getElementById('revisitToggle');
+  const priorityToggle = document.getElementById('priorityToggle');
 
   // ===== Firestore setup =====
   const configIsPlaceholder = !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('PASTE_') === 0;
   let db = null;
   if(!configIsPlaceholder){
-    try{
-      firebase.initializeApp(FIREBASE_CONFIG);
-      db = firebase.firestore();
-    }catch(err){
-      console.error('Firebase init failed', err);
-    }
+    try{ firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); }
+    catch(err){ console.error('Firebase init failed', err); }
   }
   async function storageGet(key){
     if(!db) return null;
@@ -430,56 +281,115 @@
     return { ok: true };
   }
 
-  const mainEl = document.getElementById('main');
-  const statsRow = document.getElementById('statsRow');
-  const searchInput = document.getElementById('searchInput');
-  const sortSelect = document.getElementById('sortSelect');
-  const tabSongs = document.getElementById('tabSongs');
-  const tabWriters = document.getElementById('tabWriters');
-  const tabTags = document.getElementById('tabTags');
-  const tabAlbums = document.getElementById('tabAlbums');
-  const tabStats = document.getElementById('tabStats');
-  const revisitToggle = document.getElementById('revisitToggle');
-  const priorityToggle = document.getElementById('priorityToggle');
-
   function toast(msg){
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.classList.add('show');
     setTimeout(function(){ t.classList.remove('show'); }, 2400);
   }
-
   function esc(s){
     return String(s||'').replace(/[&<>"']/g, function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
-
   function spotifyUrl(q){ return 'https://open.spotify.com/search/' + encodeURIComponent(q); }
   function geniusUrl(q){ return 'https://genius.com/search?q=' + encodeURIComponent(q); }
+  function songviewUrl(q){ return 'https://repertoire.bmi.com/Search/Search?q=' + encodeURIComponent(q); }
+
+  // ===== Generic entity helpers (artist / writer / publisher / label) =====
+  function entityArray(type){
+    if(type==='artist') return artists;
+    if(type==='writer') return writers;
+    if(type==='publisher') return publishers;
+    return labels;
+  }
+  function entityStorageKey(type){
+    if(type==='artist') return ARTIST_STORAGE_KEY;
+    if(type==='writer') return WRITER_STORAGE_KEY;
+    if(type==='publisher') return PUBLISHER_STORAGE_KEY;
+    return LABEL_STORAGE_KEY;
+  }
+  function findEntityById(type, id){
+    if(!id) return null;
+    return entityArray(type).find(function(x){ return x.id===id; }) || null;
+  }
+  function findEntityByName(type, name){
+    name = (name||'').trim().toLowerCase();
+    if(!name) return null;
+    return entityArray(type).find(function(x){ return (x.name||'').trim().toLowerCase()===name; }) || null;
+  }
+  function findOrCreateEntity(type, name){
+    name = (name||'').trim();
+    if(!name) return null;
+    let e = findEntityByName(type, name);
+    if(!e){
+      e = { id: type.slice(0,2) + Date.now() + Math.random().toString(36).slice(2,7), name: name, notes: '' };
+      entityArray(type).push(e);
+    }
+    return e;
+  }
+  async function saveEntityArray(type){
+    try{
+      const res = await storageSet(entityStorageKey(type), JSON.stringify(entityArray(type)));
+      if(!res){ toast('Save failed — try again'); }
+    }catch(e){ toast('Save failed — try again'); }
+  }
+  function entryEntityIds(type, e){
+    if(type==='artist') return e.artistId ? [e.artistId] : [];
+    if(type==='label') return e.labelId ? [e.labelId] : [];
+    if(type==='writer') return (e.writerCredits||[]).map(function(c){return c.writerId;}).filter(Boolean);
+    if(type==='publisher') return (e.writerCredits||[]).map(function(c){return c.publisherId;}).filter(Boolean);
+    return [];
+  }
+  function entityUsageMap(type){
+    const map = new Map();
+    entries.forEach(function(e){
+      entryEntityIds(type, e).forEach(function(id){
+        if(!map.has(id)) map.set(id, []);
+        map.get(id).push(e);
+      });
+    });
+    return map;
+  }
 
   function normalize(e){
     if(e.rating === undefined){ e.rating = e.liked ? 5 : 0; }
     if(!e.tags) e.tags = [];
-    if(!e.publisher) e.publisher = '';
     if(!e.spotifyLink) e.spotifyLink = '';
     if(!e.youtubeLink) e.youtubeLink = '';
     if(e.revisit === undefined) e.revisit = false;
     if(e.priority === undefined) e.priority = false;
     if(!e.isrc) e.isrc = '';
     if(!e.albumId) e.albumId = '';
+    // migrate old artist string -> artistId
+    if(!e.artistId && e.artist){
+      const a = findOrCreateEntity('artist', e.artist);
+      if(a) e.artistId = a.id;
+    }
+    if(!e.artistId) e.artistId = '';
+    // migrate old publisher string (used as label originally) -> labelId
+    if(!e.labelId && e.publisher){
+      const l = findOrCreateEntity('label', e.publisher);
+      if(l) e.labelId = l.id;
+    }
+    if(!e.labelId) e.labelId = '';
+    // migrate old songwriters string array -> writerCredits [{writerId, publisherId}]
+    if(!e.writerCredits){
+      e.writerCredits = (e.songwriters||[]).map(function(name){
+        const w = findOrCreateEntity('writer', name);
+        return w ? { writerId: w.id, publisherId: '' } : null;
+      }).filter(Boolean);
+    }
     return e;
   }
 
-  function findAlbum(id){
-    if(!id) return null;
-    return albums.find(function(a){ return a.id===id; }) || null;
-  }
-  function songsForAlbum(id){
-    return entries.filter(function(e){ return e.albumId === id; });
-  }
+  function findAlbum(id){ if(!id) return null; return albums.find(function(a){ return a.id===id; }) || null; }
+  function songsForAlbum(id){ return entries.filter(function(e){ return e.albumId === id; }); }
 
-  // ===== MusicBrainz lookup =====
+  function artistName(e){ const a = findEntityById('artist', e.artistId); return a ? a.name : (e.artist||''); }
+  function labelName(e){ const l = findEntityById('label', e.labelId); return l ? l.name : ''; }
+
+  // ===== MusicBrainz + Spotify lookup =====
   async function mbSearchRecording(title, artist){
     const q = 'recording:"' + title.replace(/"/g,'') + '"' + (artist ? ' AND artist:"' + artist.replace(/"/g,'') + '"' : '');
     const url = 'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent(q) + '&fmt=json&limit=5';
@@ -523,49 +433,12 @@
     });
     return label;
   }
-  async function lookupFromSpotifyLink(overlay){
-    const statusEl = overlay.querySelector('#lookupStatus');
-    const spotifyBtn = overlay.querySelector('#lookupSpotifyBtn');
-    const linkVal = overlay.querySelector('#f-spotify').value.trim();
-    if(!linkVal){ statusEl.textContent = 'Paste a Spotify track link first.'; return; }
-    spotifyBtn.disabled = true;
-    statusEl.textContent = 'Reading the Spotify link…';
-    try{
-      const oembedUrl = 'https://open.spotify.com/oembed?url=' + encodeURIComponent(linkVal);
-      const res = await fetch(oembedUrl);
-      if(!res.ok) throw new Error('oembed failed');
-      const data = await res.json();
-      if(!data.title) throw new Error('no title');
-      overlay.querySelector('#f-song').value = data.title;
-      statusEl.textContent = 'Got the title — matching artist and credits via MusicBrainz…';
 
-      const found = await mbSearchRecording(data.title, '');
-      let artistName = '';
-      if(found){
-        artistName = (found['artist-credit']||[]).map(function(ac){ return ac.name; }).filter(Boolean).join(', ');
-        if(artistName && !overlay.querySelector('#f-artist').value.trim()){
-          overlay.querySelector('#f-artist').value = artistName;
-        }
-        const detail = await mbGetRecordingDetail(found.id);
-        if(detail.isrcs && detail.isrcs.length && !overlay.querySelector('#f-isrc').value.trim()){
-          overlay.querySelector('#f-isrc').value = detail.isrcs[0];
-        }
-        let workId = null;
-        (detail.relations||[]).forEach(function(r){
-          if(r['target-type']==='work' && r.work && r.work.id){ workId = r.work.id; }
-        });
-        let writers = [];
-        if(workId){ writers = await mbGetWorkWriters(workId); }
-        if(writers.length){ overlay.querySelector('#f-writers').value = writers.join(', '); }
-        const label = extractLabelGuess(detail);
-        if(label){ overlay.querySelector('#f-publisher').value = label; }
-      }
-      statusEl.textContent = 'Filled in the title' + (artistName ? ' and a best-guess artist/credits' : '') + ' from the link. Spotify doesn\u2019t confirm the artist directly, so please double-check before saving.';
-    }catch(err){
-      statusEl.textContent = 'Couldn\u2019t read that link automatically — some browsers block it. Try the title+artist or ISRC lookup instead, or fill in manually.';
-    }finally{
-      spotifyBtn.disabled = false;
-    }
+  function setCreditRows(overlay, names){
+    const wrap = overlay.querySelector('#creditRows');
+    wrap.innerHTML = '';
+    if(!names.length) names = [''];
+    names.forEach(function(name){ addCreditRow(overlay, name, ''); });
   }
 
   async function runLookup(overlay, mode){
@@ -597,20 +470,65 @@
       (recording.relations||[]).forEach(function(r){
         if(r['target-type']==='work' && r.work && r.work.id){ workId = r.work.id; }
       });
-      let writers = [];
-      if(workId){ writers = await mbGetWorkWriters(workId); }
-      if(writers.length){ overlay.querySelector('#f-writers').value = writers.join(', '); }
+      let writerNames = [];
+      if(workId){ writerNames = await mbGetWorkWriters(workId); }
+      if(writerNames.length){ setCreditRows(overlay, writerNames); }
       const label = extractLabelGuess(recording);
-      if(label){ overlay.querySelector('#f-publisher').value = label; }
+      if(label){ overlay.querySelector('#f-label').value = label; }
       const bits = [];
-      if(writers.length) bits.push(writers.length + ' writer' + (writers.length===1?'':'s'));
+      if(writerNames.length) bits.push(writerNames.length + ' writer' + (writerNames.length===1?'':'s'));
       if(label) bits.push('label: ' + label);
       if(recording.isrcs && recording.isrcs.length) bits.push('ISRC found');
-      statusEl.textContent = bits.length ? ('Filled in: ' + bits.join(', ') + '. Double-check before saving.') : 'Found the recording, but MusicBrainz has no writer credits listed for it.';
+      statusEl.textContent = bits.length ? ('Filled in: ' + bits.join(', ') + '. Publishers aren\u2019t in MusicBrainz — add those yourself, or check the BMI Songview link below. Double-check before saving.') : 'Found the recording, but MusicBrainz has no writer credits listed for it.';
     }catch(err){
       statusEl.textContent = 'Lookup failed — MusicBrainz may be unreachable right now. Try again or fill in manually.';
     }finally{
       titleBtn.disabled = false; isrcBtn.disabled = false;
+    }
+  }
+
+  async function lookupFromSpotifyLink(overlay){
+    const statusEl = overlay.querySelector('#lookupStatus');
+    const spotifyBtn = overlay.querySelector('#lookupSpotifyBtn');
+    const linkVal = overlay.querySelector('#f-spotify').value.trim();
+    if(!linkVal){ statusEl.textContent = 'Paste a Spotify track link first.'; return; }
+    spotifyBtn.disabled = true;
+    statusEl.textContent = 'Reading the Spotify link…';
+    try{
+      const oembedUrl = 'https://open.spotify.com/oembed?url=' + encodeURIComponent(linkVal);
+      const res = await fetch(oembedUrl);
+      if(!res.ok) throw new Error('oembed failed');
+      const data = await res.json();
+      if(!data.title) throw new Error('no title');
+      overlay.querySelector('#f-song').value = data.title;
+      statusEl.textContent = 'Got the title — matching artist and credits via MusicBrainz…';
+
+      const found = await mbSearchRecording(data.title, '');
+      let artistNameFound = '';
+      if(found){
+        artistNameFound = (found['artist-credit']||[]).map(function(ac){ return ac.name; }).filter(Boolean).join(', ');
+        if(artistNameFound && !overlay.querySelector('#f-artist').value.trim()){
+          overlay.querySelector('#f-artist').value = artistNameFound;
+        }
+        const detail = await mbGetRecordingDetail(found.id);
+        if(detail.isrcs && detail.isrcs.length && !overlay.querySelector('#f-isrc').value.trim()){
+          overlay.querySelector('#f-isrc').value = detail.isrcs[0];
+        }
+        let workId = null;
+        (detail.relations||[]).forEach(function(r){
+          if(r['target-type']==='work' && r.work && r.work.id){ workId = r.work.id; }
+        });
+        let writerNames = [];
+        if(workId){ writerNames = await mbGetWorkWriters(workId); }
+        if(writerNames.length){ setCreditRows(overlay, writerNames); }
+        const label = extractLabelGuess(detail);
+        if(label){ overlay.querySelector('#f-label').value = label; }
+      }
+      statusEl.textContent = 'Filled in the title' + (artistNameFound ? ' and a best-guess artist/credits' : '') + ' from the link. Spotify doesn\u2019t confirm the artist directly, so please double-check before saving.';
+    }catch(err){
+      statusEl.textContent = 'Couldn\u2019t read that link automatically — some browsers block it. Try the title+artist or ISRC lookup instead, or fill in manually.';
+    }finally{
+      spotifyBtn.disabled = false;
     }
   }
 
@@ -623,58 +541,31 @@
     }
     try{
       const res = await storageGet(STORAGE_KEY);
-      if(res && res.value){
-        entries = JSON.parse(res.value);
-      } else {
+      if(res && res.value){ entries = JSON.parse(res.value); }
+      else {
         try{
           const old = await storageGet(OLD_STORAGE_KEY);
           entries = old && old.value ? JSON.parse(old.value) : [];
         }catch(e2){ entries = []; }
       }
-    }catch(e){
-      entries = [];
-    }
-    try{
-      const aRes = await storageGet(ALBUM_STORAGE_KEY);
-      albums = aRes && aRes.value ? JSON.parse(aRes.value) : [];
-    }catch(e){
-      albums = [];
-    }
+    }catch(e){ entries = []; }
+    try{ const r = await storageGet(ALBUM_STORAGE_KEY); albums = r && r.value ? JSON.parse(r.value) : []; }catch(e){ albums = []; }
+    try{ const r = await storageGet(ARTIST_STORAGE_KEY); artists = r && r.value ? JSON.parse(r.value) : []; }catch(e){ artists = []; }
+    try{ const r = await storageGet(WRITER_STORAGE_KEY); writers = r && r.value ? JSON.parse(r.value) : []; }catch(e){ writers = []; }
+    try{ const r = await storageGet(PUBLISHER_STORAGE_KEY); publishers = r && r.value ? JSON.parse(r.value) : []; }catch(e){ publishers = []; }
+    try{ const r = await storageGet(LABEL_STORAGE_KEY); labels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ labels = []; }
     entries.forEach(normalize);
     loaded = true;
     render();
-    if(entries.length){ saveEntries(); }
+    if(entries.length){ saveEntries(); saveEntityArray('artist'); saveEntityArray('writer'); saveEntityArray('label'); }
   }
-
-  async function saveAlbums(){
-    try{
-      const res = await storageSet(ALBUM_STORAGE_KEY, JSON.stringify(albums));
-      if(!res){ toast('Save failed — try again'); }
-    }catch(e){
-      toast('Save failed — try again');
-    }
-  }
-
   async function saveEntries(){
-    try{
-      const res = await storageSet(STORAGE_KEY, JSON.stringify(entries));
-      if(!res){ toast('Save failed — try again'); }
-    }catch(e){
-      toast('Save failed — try again');
-    }
+    try{ const res = await storageSet(STORAGE_KEY, JSON.stringify(entries)); if(!res){ toast('Save failed — try again'); } }
+    catch(e){ toast('Save failed — try again'); }
   }
-
-  function uniqueWriters(){
-    const map = new Map();
-    entries.forEach(function(e){
-      (e.songwriters||[]).forEach(function(w){
-        const key = w.trim();
-        if(!key) return;
-        if(!map.has(key)) map.set(key, []);
-        map.get(key).push(e);
-      });
-    });
-    return map;
+  async function saveAlbums(){
+    try{ const res = await storageSet(ALBUM_STORAGE_KEY, JSON.stringify(albums)); if(!res){ toast('Save failed — try again'); } }
+    catch(e){ toast('Save failed — try again'); }
   }
 
   function uniqueTags(){
@@ -689,24 +580,24 @@
     });
     return map;
   }
-
   function matchesSearch(e, q){
     if(!q) return true;
     q = q.toLowerCase();
+    const writerNames = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); return w?w.name:''; }).join(' ');
+    const pubNames = (e.writerCredits||[]).map(function(c){ const p=findEntityById('publisher',c.publisherId); return p?p.name:''; }).join(' ');
     return (e.song||'').toLowerCase().includes(q)
-      || (e.artist||'').toLowerCase().includes(q)
+      || artistName(e).toLowerCase().includes(q)
       || (e.thoughts||'').toLowerCase().includes(q)
-      || (e.publisher||'').toLowerCase().includes(q)
-      || (e.songwriters||[]).some(function(w){ return w.toLowerCase().includes(q); })
+      || labelName(e).toLowerCase().includes(q)
+      || writerNames.toLowerCase().includes(q)
+      || pubNames.toLowerCase().includes(q)
       || (e.tags||[]).some(function(t){ return t.toLowerCase().includes(q); });
   }
-
   function applyFilters(list){
     if(revisitOnly) list = list.filter(function(e){ return e.revisit; });
     if(priorityOnly) list = list.filter(function(e){ return e.priority; });
     return list;
   }
-
   function applySort(list){
     const copy = list.slice();
     if(sortMode==='new') copy.sort(function(a,b){ return b.createdAt-a.createdAt; });
@@ -715,24 +606,25 @@
     else if(sortMode==='az') copy.sort(function(a,b){ return (a.song||'').localeCompare(b.song||''); });
     return copy;
   }
-
   function starsHtml(rating){
-    rating = rating || 0;
-    let out = '';
-    for(let i=1;i<=5;i++){ out += (i<=rating ? '★' : '☆'); }
+    rating = rating || 0; let out = '';
+    for(let i=1;i<=5;i++){ out += (i<=rating ? '\u2605' : '\u2606'); }
     return out;
   }
 
   function render(){
     const q = searchInput.value.trim();
-    const wCount = uniqueWriters().size;
+    const wCount = entityUsageMap('writer').size;
     const tCount = uniqueTags().size;
     statsRow.textContent = loaded
-      ? entries.length + ' song' + (entries.length===1?'':'s') + ' logged · ' + wCount + ' writer' + (wCount===1?'':'s') + ' · ' + tCount + ' tag' + (tCount===1?'':'s')
+      ? entries.length + ' song' + (entries.length===1?'':'s') + ' logged \u00b7 ' + wCount + ' writer' + (wCount===1?'':'s') + ' \u00b7 ' + tCount + ' tag' + (tCount===1?'':'s')
       : 'Loading catalog…';
 
     tabSongs.classList.toggle('active', view==='songs');
-    tabWriters.classList.toggle('active', view==='writers' || view==='writerFilter');
+    tabWriters.classList.toggle('active', (view==='entityIndex' && entityIndexType==='writer') || (view==='entityFilter' && entityFilterType==='writer'));
+    tabArtists.classList.toggle('active', (view==='entityIndex' && entityIndexType==='artist') || (view==='entityFilter' && entityFilterType==='artist'));
+    tabPublishers.classList.toggle('active', (view==='entityIndex' && entityIndexType==='publisher') || (view==='entityFilter' && entityFilterType==='publisher'));
+    tabLabels.classList.toggle('active', (view==='entityIndex' && entityIndexType==='label') || (view==='entityFilter' && entityFilterType==='label'));
     tabTags.classList.toggle('active', view==='tags' || view==='tagFilter');
     tabAlbums.classList.toggle('active', view==='albums' || view==='albumFilter');
     tabStats.classList.toggle('active', view==='stats');
@@ -740,13 +632,10 @@
     priorityToggle.classList.toggle('toggle-on', priorityOnly);
     priorityToggle.classList.toggle('priority-on', priorityOnly);
 
-    if(!loaded){
-      mainEl.innerHTML = '<div class="empty"><strong>Reading the catalog…</strong>one moment</div>';
-      return;
-    }
+    if(!loaded){ mainEl.innerHTML = '<div class="empty"><strong>Reading the catalog…</strong>one moment</div>'; return; }
 
-    if(view === 'writers'){ renderWriters(); return; }
-    if(view === 'writerFilter'){ renderWriterFilter(q); return; }
+    if(view === 'entityIndex'){ renderEntityIndex(entityIndexType); return; }
+    if(view === 'entityFilter'){ renderEntityFilter(entityFilterType, entityFilterId, q); return; }
     if(view === 'tags'){ renderTags(); return; }
     if(view === 'tagFilter'){ renderTagFilter(q); return; }
     if(view === 'albums'){ renderAlbums(); return; }
@@ -757,11 +646,10 @@
 
   function renderSongs(q){
     let list = entries.filter(function(e){ return matchesSearch(e,q); });
-    list = applyFilters(list);
-    list = applySort(list);
+    list = applyFilters(list); list = applySort(list);
     if(list.length===0){
       mainEl.innerHTML = entries.length===0
-        ? '<div class="empty"><strong>No cards yet</strong>Add the first song you want to keep tabs on — the artist, who wrote it, and what you think.</div>'
+        ? '<div class="empty"><strong>No cards yet</strong>Add the first song you want to keep tabs on.</div>'
         : '<div class="empty"><strong>Nothing matches</strong>Try a different search or filter.</div>';
       return;
     }
@@ -770,112 +658,174 @@
   }
 
   function cardHtml(e){
-    const writers = (e.songwriters||[]);
-    const tags = (e.tags||[]);
     const idxFromEnd = entries.length - entries.findIndex(function(x){ return x.id===e.id; });
     const catalogNo = 'NO. ' + String(idxFromEnd).padStart(3,'0');
-    const spotifyHref = e.spotifyLink ? e.spotifyLink : spotifyUrl(e.song + ' ' + e.artist);
-    const youtubeHref = e.youtubeLink ? e.youtubeLink : ('https://www.youtube.com/results?search_query=' + encodeURIComponent(e.song + ' ' + e.artist));
-    const flags = (e.priority ? '<span class="stamp-mark stamp-priority">🔥 PRIORITY</span>' : '') + (e.revisit ? '<span class="stamp-mark stamp-revisit">REVISIT</span>' : '');
+    const spotifyHref = e.spotifyLink ? e.spotifyLink : spotifyUrl(e.song + ' ' + artistName(e));
+    const youtubeHref = e.youtubeLink ? e.youtubeLink : ('https://www.youtube.com/results?search_query=' + encodeURIComponent(e.song + ' ' + artistName(e)));
+    const flags = (e.priority ? '<span class="stamp-mark stamp-priority">PRIORITY</span>' : '') + (e.revisit ? '<span class="stamp-mark stamp-revisit">REVISIT</span>' : '');
+    const alb = findAlbum(e.albumId);
+    const lbl = findEntityById('label', e.labelId);
+    const aName = artistName(e);
+    const credits = (e.writerCredits||[]).map(function(c){
+      const w = findEntityById('writer', c.writerId);
+      const p = findEntityById('publisher', c.publisherId);
+      if(!w) return '';
+      return '<button class="chip" data-entity-type="writer" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+'</button>' +
+        (p ? '<button class="chip chip-pub" data-entity-type="publisher" data-entity-id="'+esc(c.publisherId)+'">'+esc(p.name)+'</button>' : '');
+    }).join('');
     return '' +
     '<div class="card' + (e.priority ? ' is-priority' : '') + '" data-id="' + esc(e.id) + '">' +
       '<span class="tab">' + catalogNo + '</span>' +
       '<span class="punch" aria-hidden="true"></span>' +
       (flags ? '<span class="flag-row">' + flags + '</span>' : '') +
       '<div class="song-title">' + (esc(e.song)||'Untitled') + '</div>' +
-      '<div class="artist">' + (esc(e.artist)||'Unknown artist') + '</div>' +
-      (e.albumId && findAlbum(e.albumId) ? '<button class="chip chip-tag" data-album="' + esc(e.albumId) + '" style="align-self:flex-start;">💿 ' + esc(findAlbum(e.albumId).title) + '</button>' : '') +
-      (e.publisher ? '<div class="publisher">Pub: ' + esc(e.publisher) + '</div>' : '') +
+      (aName ? '<button class="artist" data-entity-type="artist" data-entity-id="'+esc(e.artistId)+'">'+esc(aName)+'</button>' : '<div class="artist">Unknown artist</div>') +
+      (alb ? '<button class="chip chip-tag" data-album="' + esc(e.albumId) + '" style="align-self:flex-start;">' + esc(alb.title) + '</button>' : '') +
+      (lbl ? '<div class="publisher">Label: <button data-entity-type="label" data-entity-id="'+esc(e.labelId)+'">'+esc(lbl.name)+'</button></div>' : '') +
       (e.isrc ? '<div class="publisher">ISRC: ' + esc(e.isrc) + '</div>' : '') +
       '<div class="stars">' + starsHtml(e.rating) + '</div>' +
       '<hr class="divider">' +
       '<div class="writers-label">Written by</div>' +
-      '<div class="chip-row">' +
-        (writers.length ? writers.map(function(w){ return '<button class="chip" data-writer="'+esc(w)+'">'+esc(w)+'</button>'; }).join('') : '<span class="writers-label" style="font-style:italic;">not logged</span>') +
-      '</div>' +
-      (tags.length ? '<div class="chip-row">' + tags.map(function(t){ return '<button class="chip chip-tag" data-tag="'+esc(t)+'">'+esc(t)+'</button>'; }).join('') + '</div>' : '') +
+      '<div class="chip-row">' + (credits || '<span class="writers-label" style="font-style:italic;">not logged</span>') + '</div>' +
+      ((e.tags||[]).length ? '<div class="chip-row">' + e.tags.map(function(t){ return '<button class="chip chip-tag" data-tag="'+esc(t)+'">'+esc(t)+'</button>'; }).join('') + '</div>' : '') +
       '<div class="' + (e.thoughts ? 'thoughts' : 'thoughts empty-thought') + '">' + (e.thoughts ? esc(e.thoughts) : 'No notes yet.') + '</div>' +
       (e.streamNote ? '<div class="writers-label">Streams / status</div><div class="thoughts">' + esc(e.streamNote) + '</div>' : '') +
       '<div class="card-foot">' +
-        '<a class="link-btn" target="_blank" rel="noopener" href="' + esc(spotifyHref) + '">Spotify ↗</a>' +
-        '<a class="link-btn" target="_blank" rel="noopener" href="' + esc(youtubeHref) + '">YouTube ↗</a>' +
-        '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(e.song + ' ' + e.artist) + '">Genius ↗</a>' +
+        '<a class="link-btn" target="_blank" rel="noopener" href="' + esc(spotifyHref) + '">Spotify \u2197</a>' +
+        '<a class="link-btn" target="_blank" rel="noopener" href="' + esc(youtubeHref) + '">YouTube \u2197</a>' +
+        '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(e.song + ' ' + aName) + '">Genius \u2197</a>' +
         '<button class="icon-btn" data-share="' + esc(e.id) + '" type="button">share</button>' +
         '<button class="icon-btn push-right" data-edit="' + esc(e.id) + '" type="button">edit</button>' +
       '</div>' +
     '</div>';
   }
 
-  function renderWriters(){
-    const map = uniqueWriters();
+  function renderEntityIndex(type){
+    const meta = ENTITY_META[type];
+    const map = entityUsageMap(type);
+    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newEntityBtn" type="button">+ New ' + meta.label.toLowerCase() + '</button></div>';
     if(map.size===0){
-      mainEl.innerHTML = '<div class="empty"><strong>No writers logged</strong>Add songwriter names to a card and they will show up here as an index.</div>';
+      html += '<div class="empty"><strong>No ' + meta.label.toLowerCase() + 's yet</strong>Add one from a card, or create one directly here.</div>';
+      mainEl.innerHTML = html;
+      document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
       return;
     }
     const rows = Array.from(map.entries()).sort(function(a,b){ return b[1].length-a[1].length || a[0].localeCompare(b[0]); });
-    mainEl.innerHTML = '<div class="writer-index">' + rows.map(function(pair){
-      const name = pair[0], songs = pair[1];
-      return '<div class="writer-row" data-writer="' + esc(name) + '">' +
+    html += '<div class="writer-index">' + rows.map(function(pair){
+      const ent = findEntityById(type, pair[0]);
+      const songs = pair[1];
+      const name = ent ? ent.name : '(unknown)';
+      return '<div class="writer-row" data-entity-row="' + esc(pair[0]) + '">' +
         '<div class="writer-name">' + esc(name) + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
-        '<div class="writer-songs">' + songs.map(function(s){
-          const alb = findAlbum(s.albumId);
-          return esc(s.song) + (alb ? ' (' + esc(alb.title) + ')' : '');
-        }).join(' · ') + '</div>' +
-        '<div class="writer-links">' +
-          '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(name) + '" onclick="event.stopPropagation()">Spotify ↗</a>' +
-          '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(name) + '" onclick="event.stopPropagation()">Genius ↗</a>' +
-        '</div>' +
+        '<div class="writer-songs">' + songs.map(function(s){ const alb=findAlbum(s.albumId); return esc(s.song) + (alb ? ' (' + esc(alb.title) + ')' : ''); }).join(' \u00b7 ') + '</div>' +
+        (type!=='publisher' && type!=='label' ? '<div class="writer-links"><a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(name) + '" onclick="event.stopPropagation()">Spotify \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(name) + '" onclick="event.stopPropagation()">Genius \u2197</a></div>' : '') +
       '</div>';
     }).join('') + '</div>';
-    mainEl.querySelectorAll('.writer-row').forEach(function(row){
+    mainEl.innerHTML = html;
+    document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
+    mainEl.querySelectorAll('[data-entity-row]').forEach(function(row){
       row.addEventListener('click', function(){
-        writerFilter = row.getAttribute('data-writer');
-        view = 'writerFilter';
-        render();
+        entityFilterType = type; entityFilterId = row.getAttribute('data-entity-row');
+        view = 'entityFilter'; render();
       });
     });
   }
 
-  function renderWriterFilter(q){
-    let list = entries.filter(function(e){ return (e.songwriters||[]).includes(writerFilter) && matchesSearch(e,q); });
+  function renderEntityFilter(type, id, q){
+    const meta = ENTITY_META[type];
+    const ent = findEntityById(type, id);
+    if(!ent){ view='entityIndex'; entityIndexType=type; render(); return; }
+    let list = entries.filter(function(e){ return entryEntityIds(type,e).indexOf(id) !== -1 && matchesSearch(e,q); });
     list = applySort(applyFilters(list));
-    let html = '<button class="back-link" id="backToWriters">← All writers</button>';
-    html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' credited to <strong>' + esc(writerFilter) + '</strong></div>';
-    html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>Nothing here</strong>No cards for this writer match your filters.</div>';
+    let html = '<button class="back-link" id="backToEntity">\u2190 All ' + meta.label.toLowerCase() + 's</button>';
+    html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + '</div>' +
+      (ent.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(ent.notes) + '</div>' : '') +
+      '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
+        '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a>' +
+        '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>' +
+        (type==='writer' || type==='publisher' ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a>' : '') +
+        '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
+        '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
+      '</div>' +
+    '</div>';
+    html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
+    html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Attach this ' + meta.label.toLowerCase() + ' to a card to see it here.</div>';
     mainEl.innerHTML = html;
-    document.getElementById('backToWriters').addEventListener('click', function(){ view='writers'; render(); });
+    document.getElementById('backToEntity').addEventListener('click', function(){ view='entityIndex'; entityIndexType=type; render(); });
+    document.getElementById('editEntityBtn').addEventListener('click', function(){ openEntityModal(type, id); });
+    document.getElementById('deleteEntityBtn').addEventListener('click', async function(){
+      if(!confirm('Delete "' + ent.name + '"? Songs stay, they just lose this credit.')) return;
+      const arr = entityArray(type);
+      const idx = arr.findIndex(function(x){ return x.id===id; });
+      if(idx>-1) arr.splice(idx,1);
+      entries.forEach(function(e){
+        if(type==='artist' && e.artistId===id) e.artistId='';
+        if(type==='label' && e.labelId===id) e.labelId='';
+        if(type==='writer') e.writerCredits = (e.writerCredits||[]).filter(function(c){ return c.writerId!==id; });
+        if(type==='publisher') (e.writerCredits||[]).forEach(function(c){ if(c.publisherId===id) c.publisherId=''; });
+      });
+      await saveEntityArray(type);
+      await saveEntries();
+      toast(meta.label + ' deleted');
+      view = 'entityIndex'; entityIndexType = type; render();
+    });
     attachCardHandlers();
+  }
+
+  function openEntityModal(type, id){
+    const meta = ENTITY_META[type];
+    const ent = id ? findEntityById(type, id) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (ent ? 'Edit ' + meta.label.toLowerCase() : 'New ' + meta.label.toLowerCase()) + '</h2>' +
+        '<div class="field"><label>Name</label><input id="ent-name" type="text" value="' + (ent?esc(ent.name):'') + '" placeholder="' + meta.label + ' name"></div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="ent-notes" placeholder="Anything worth remembering…">' + (ent?esc(ent.notes||''):'') + '</textarea></div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-ghost" id="entCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="entSaveBtn" type="button">' + (ent?'Save changes':'Create') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#entCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    overlay.querySelector('#entSaveBtn').addEventListener('click', async function(){
+      const name = overlay.querySelector('#ent-name').value.trim();
+      const notes = overlay.querySelector('#ent-notes').value.trim();
+      if(!name){ toast('Give it a name first'); return; }
+      if(ent){ ent.name = name; ent.notes = notes; }
+      else { entityArray(type).push({ id: type.slice(0,2)+Date.now()+Math.random().toString(36).slice(2,7), name: name, notes: notes }); }
+      overlay.remove();
+      await saveEntityArray(type);
+      toast(ent ? meta.label+' updated' : meta.label+' created');
+      render();
+    });
+    setTimeout(function(){ overlay.querySelector('#ent-name').focus(); }, 30);
   }
 
   function renderTags(){
     const map = uniqueTags();
-    if(map.size===0){
-      mainEl.innerHTML = '<div class="empty"><strong>No tags yet</strong>Add genre or mood tags to a card and they will show up here.</div>';
-      return;
-    }
+    if(map.size===0){ mainEl.innerHTML = '<div class="empty"><strong>No tags yet</strong>Add genre or mood tags to a card and they will show up here.</div>'; return; }
     const rows = Array.from(map.entries()).sort(function(a,b){ return b[1].length-a[1].length || a[0].localeCompare(b[0]); });
     mainEl.innerHTML = '<div class="writer-index">' + rows.map(function(pair){
       const name = pair[0], songs = pair[1];
       return '<div class="writer-row tag-row" data-tag="' + esc(name) + '">' +
         '<div class="writer-name">' + esc(name) + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
-        '<div class="writer-songs">' + songs.map(function(s){ return esc(s.song); }).join(' · ') + '</div>' +
+        '<div class="writer-songs">' + songs.map(function(s){ return esc(s.song); }).join(' \u00b7 ') + '</div>' +
       '</div>';
     }).join('') + '</div>';
     mainEl.querySelectorAll('.writer-row').forEach(function(row){
-      row.addEventListener('click', function(){
-        tagFilter = row.getAttribute('data-tag');
-        view = 'tagFilter';
-        render();
-      });
+      row.addEventListener('click', function(){ tagFilter = row.getAttribute('data-tag'); view='tagFilter'; render(); });
     });
   }
-
   function renderTagFilter(q){
     let list = entries.filter(function(e){ return (e.tags||[]).includes(tagFilter) && matchesSearch(e,q); });
     list = applySort(applyFilters(list));
-    let html = '<button class="back-link" id="backToTags">← All tags</button>';
+    let html = '<button class="back-link" id="backToTags">\u2190 All tags</button>';
     html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' tagged <strong>' + esc(tagFilter) + '</strong></div>';
     html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>Nothing here</strong>No cards for this tag match your filters.</div>';
     mainEl.innerHTML = html;
@@ -896,29 +846,24 @@
       return '<div class="writer-row" data-album-row="' + esc(a.id) + '">' +
         '<div class="writer-name">' + esc(a.title||'Untitled album') + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
-        '<div class="writer-songs">' + esc(a.artist||'') + (a.releaseDate ? ' · ' + esc(a.releaseDate) : '') + '</div>' +
+        '<div class="writer-songs">' + esc(a.artist||'') + (a.releaseDate ? ' \u00b7 ' + esc(a.releaseDate) : '') + '</div>' +
       '</div>';
     }).join('') + '</div>';
     mainEl.innerHTML = html;
     document.getElementById('newAlbumBtn').addEventListener('click', function(){ openAlbumModal(null); });
     mainEl.querySelectorAll('[data-album-row]').forEach(function(row){
-      row.addEventListener('click', function(){
-        albumFilterId = row.getAttribute('data-album-row');
-        view = 'albumFilter';
-        render();
-      });
+      row.addEventListener('click', function(){ albumFilterId = row.getAttribute('data-album-row'); view='albumFilter'; render(); });
     });
   }
-
   function renderAlbumFilter(q){
     const album = findAlbum(albumFilterId);
     if(!album){ view='albums'; render(); return; }
     let list = entries.filter(function(e){ return e.albumId === albumFilterId && matchesSearch(e,q); });
     list = applySort(applyFilters(list));
-    let html = '<button class="back-link" id="backToAlbums">← All albums</button>';
+    let html = '<button class="back-link" id="backToAlbums">\u2190 All albums</button>';
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(album.title||'Untitled album') + '</div>' +
-      '<div class="artist" style="margin-top:4px;">' + esc(album.artist||'') + (album.releaseDate ? ' · ' + esc(album.releaseDate) : '') + '</div>' +
+      '<div class="artist" style="margin-top:4px;">' + esc(album.artist||'') + (album.releaseDate ? ' \u00b7 ' + esc(album.releaseDate) : '') + '</div>' +
       (album.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(album.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px;">' +
         '<button class="icon-btn" id="editAlbumBtn" type="button">edit album</button>' +
@@ -934,15 +879,11 @@
       if(!confirm('Delete "' + album.title + '"? Songs stay, they just lose the album link.')) return;
       albums = albums.filter(function(a){ return a.id !== album.id; });
       entries.forEach(function(e){ if(e.albumId === album.id) e.albumId = ''; });
-      await saveAlbums();
-      await saveEntries();
-      toast('Album deleted');
-      view = 'albums';
-      render();
+      await saveAlbums(); await saveEntries();
+      toast('Album deleted'); view = 'albums'; render();
     });
     attachCardHandlers();
   }
-
   function openAlbumModal(id){
     const a = id ? findAlbum(id) : null;
     const overlay = document.createElement('div');
@@ -950,13 +891,12 @@
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (a ? 'Edit album' : 'New album') + '</h2>' +
-        '<div class="sub">' + (a ? 'Update this album' : 'Create an album to attach songs to') + '</div>' +
-        '<div class="field"><label for="al-title">Album title</label><input id="al-title" type="text" value="' + (a?esc(a.title):'') + '" placeholder="e.g. Late Bloom"></div>' +
+        '<div class="field"><label>Album title</label><input id="al-title" type="text" value="' + (a?esc(a.title):'') + '" placeholder="e.g. Late Bloom"></div>' +
         '<div class="field-row">' +
-          '<div class="field"><label for="al-artist">Artist</label><input id="al-artist" type="text" value="' + (a?esc(a.artist||''):'') + '" placeholder="Who released it"></div>' +
-          '<div class="field"><label for="al-date">Release date (optional)</label><input id="al-date" type="text" value="' + (a?esc(a.releaseDate||''):'') + '" placeholder="e.g. 2024 or Mar 2024"></div>' +
+          '<div class="field"><label>Artist</label><input id="al-artist" type="text" value="' + (a?esc(a.artist||''):'') + '" placeholder="Who released it"></div>' +
+          '<div class="field"><label>Release date (optional)</label><input id="al-date" type="text" value="' + (a?esc(a.releaseDate||''):'') + '" placeholder="e.g. 2024"></div>' +
         '</div>' +
-        '<div class="field"><label for="al-notes">Notes (optional)</label><textarea id="al-notes" placeholder="Anything worth remembering about this album…">' + (a?esc(a.notes||''):'') + '</textarea></div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="al-notes">' + (a?esc(a.notes||''):'') + '</textarea></div>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-ghost" id="alCancelBtn" type="button">Cancel</button>' +
           '<button class="btn btn-primary" id="alSaveBtn" type="button">' + (a ? 'Save changes' : 'Create album') + '</button>' +
@@ -971,72 +911,51 @@
       const releaseDate = overlay.querySelector('#al-date').value.trim();
       const notes = overlay.querySelector('#al-notes').value.trim();
       if(!title){ toast('Give the album a title first'); return; }
-      if(a){
-        Object.assign(a, {title, artist, releaseDate, notes});
-      } else {
-        albums.push({ id: 'alb' + Date.now() + Math.random().toString(36).slice(2,7), title, artist, releaseDate, notes });
-      }
-      overlay.remove();
-      await saveAlbums();
-      toast(a ? 'Album updated' : 'Album created');
-      render();
+      if(a){ Object.assign(a, {title, artist, releaseDate, notes}); }
+      else{ albums.push({ id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title, artist, releaseDate, notes }); }
+      overlay.remove(); await saveAlbums();
+      toast(a ? 'Album updated' : 'Album created'); render();
     });
     setTimeout(function(){ overlay.querySelector('#al-title').focus(); }, 30);
   }
 
   function renderStats(){
-    const wMap = uniqueWriters();
-    const tMap = uniqueTags();
+    const wMap = entityUsageMap('writer'), aMap = entityUsageMap('artist'), pMap = entityUsageMap('publisher'), lMap = entityUsageMap('label');
     const revisitCount = entries.filter(function(e){ return e.revisit; }).length;
     const priorityCount = entries.filter(function(e){ return e.priority; }).length;
     const avgRating = entries.length ? (entries.reduce(function(s,e){ return s+(e.rating||0); },0) / entries.length).toFixed(1) : '0.0';
     const topWriters = Array.from(wMap.entries()).sort(function(a,b){ return b[1].length-a[1].length; }).slice(0,8);
-    const topTags = Array.from(tMap.entries()).sort(function(a,b){ return b[1].length-a[1].length; }).slice(0,8);
-
     let html = '<div class="stats-grid">' +
-      '<div class="stat-tile"><div class="stat-num">' + entries.length + '</div><div class="stat-label">Songs logged</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + wMap.size + '</div><div class="stat-label">Writers tracked</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + albums.length + '</div><div class="stat-label">Albums logged</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + avgRating + '</div><div class="stat-label">Average rating</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + priorityCount + '</div><div class="stat-label">Priority leads</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + revisitCount + '</div><div class="stat-label">Flagged to revisit</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + entries.length + '</div><div class="stat-label">Songs</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + wMap.size + '</div><div class="stat-label">Writers</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + aMap.size + '</div><div class="stat-label">Artists</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + pMap.size + '</div><div class="stat-label">Publishers</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + lMap.size + '</div><div class="stat-label">Labels</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + albums.length + '</div><div class="stat-label">Albums</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + avgRating + '</div><div class="stat-label">Avg rating</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + priorityCount + '</div><div class="stat-label">Priority</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + revisitCount + '</div><div class="stat-label">Revisit</div></div>' +
     '</div>';
-
     html += '<div class="stats-section"><h3>Most-tracked writers</h3>';
-    html += topWriters.length ? topWriters.map(function(p){ return '<div class="rank-row"><span>'+esc(p[0])+'</span><span>'+p[1].length+' song'+(p[1].length===1?'':'s')+'</span></div>'; }).join('') : '<div class="writers-label">Nothing logged yet.</div>';
+    html += topWriters.length ? topWriters.map(function(p){ const w=findEntityById('writer',p[0]); return '<div class="rank-row"><span>'+esc(w?w.name:'?')+'</span><span>'+p[1].length+' song'+(p[1].length===1?'':'s')+'</span></div>'; }).join('') : '<div class="writers-label">Nothing logged yet.</div>';
     html += '</div>';
-
-    html += '<div class="stats-section"><h3>Top tags</h3>';
-    html += topTags.length ? topTags.map(function(p){ return '<div class="rank-row"><span>'+esc(p[0])+'</span><span>'+p[1].length+' song'+(p[1].length===1?'':'s')+'</span></div>'; }).join('') : '<div class="writers-label">No tags logged yet.</div>';
-    html += '</div>';
-
     mainEl.innerHTML = html;
   }
 
   function attachCardHandlers(){
-    mainEl.querySelectorAll('[data-writer]').forEach(function(el){
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
       el.addEventListener('click', function(ev){
         ev.preventDefault();
-        writerFilter = el.getAttribute('data-writer');
-        view = 'writerFilter';
-        render();
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
       });
     });
     mainEl.querySelectorAll('[data-tag]').forEach(function(el){
-      el.addEventListener('click', function(ev){
-        ev.preventDefault();
-        tagFilter = el.getAttribute('data-tag');
-        view = 'tagFilter';
-        render();
-      });
+      el.addEventListener('click', function(ev){ ev.preventDefault(); tagFilter = el.getAttribute('data-tag'); view='tagFilter'; render(); });
     });
     mainEl.querySelectorAll('[data-album]').forEach(function(el){
-      el.addEventListener('click', function(ev){
-        ev.preventDefault();
-        albumFilterId = el.getAttribute('data-album');
-        view = 'albumFilter';
-        render();
-      });
+      el.addEventListener('click', function(ev){ ev.preventDefault(); albumFilterId = el.getAttribute('data-album'); view='albumFilter'; render(); });
     });
     mainEl.querySelectorAll('[data-edit]').forEach(function(el){
       el.addEventListener('click', function(){ openModal(el.getAttribute('data-edit')); });
@@ -1046,12 +965,12 @@
     });
   }
 
-  // ===== Share a single card =====
   function buildShareText(e){
     const lines = [];
-    lines.push(e.song + (e.artist ? ' — ' + e.artist : ''));
-    if((e.songwriters||[]).length) lines.push('Written by: ' + e.songwriters.join(', '));
-    if(e.publisher) lines.push('Publisher: ' + e.publisher);
+    lines.push(e.song + (artistName(e) ? ' \u2014 ' + artistName(e) : ''));
+    const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + (p ? ' ('+p.name+')' : ''); }).filter(Boolean);
+    if(credits.length) lines.push('Written by: ' + credits.join(', '));
+    if(labelName(e)) lines.push('Label: ' + labelName(e));
     if(e.rating) lines.push('Rating: ' + starsHtml(e.rating));
     if((e.tags||[]).length) lines.push('Tags: ' + e.tags.join(', '));
     if(e.thoughts) lines.push('Notes: ' + e.thoughts);
@@ -1065,55 +984,35 @@
     if(!e) return;
     const text = buildShareText(e);
     if(navigator.share){
-      try{
-        await navigator.share({ title: e.song, text: text });
-        return;
-      }catch(err){
-        if(err && err.name === 'AbortError') return;
-        // fall through to clipboard
-      }
+      try{ await navigator.share({ title: e.song, text: text }); return; }
+      catch(err){ if(err && err.name === 'AbortError') return; }
     }
-    try{
-      await navigator.clipboard.writeText(text);
-      toast('Copied card to clipboard');
-    }catch(err){
-      toast('Could not copy — select text manually');
-    }
+    try{ await navigator.clipboard.writeText(text); toast('Copied card to clipboard'); }
+    catch(err){ toast('Could not copy — select text manually'); }
   }
 
-  // ===== CSV export =====
-  function csvEscape(s){
-    s = String(s==null ? '' : s);
-    if(/[",\n]/.test(s)){ s = '"' + s.replace(/"/g,'""') + '"'; }
-    return s;
-  }
+  function csvEscape(s){ s = String(s==null?'':s); if(/[",\n]/.test(s)){ s = '"' + s.replace(/"/g,'""') + '"'; } return s; }
   function exportCsv(){
-    const headers = ['Song','Artist','Album','ISRC','Songwriters','Tags','Publisher','Rating','Priority','Revisit','Thoughts','Streams/Status','Spotify Link','YouTube Link','Date Added'];
+    const headers = ['Song','Artist','Album','Label','ISRC','Songwriter Credits','Tags','Rating','Priority','Revisit','Thoughts','Streams/Status','Spotify Link','YouTube Link','Date Added'];
     const rows = entries.slice().sort(function(a,b){ return b.createdAt-a.createdAt; }).map(function(e){
       const alb = findAlbum(e.albumId);
+      const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + (p ? ' ('+p.name+')' : ''); }).filter(Boolean).join('; ');
       return [
-        e.song, e.artist, alb ? alb.title : '', e.isrc, (e.songwriters||[]).join('; '), (e.tags||[]).join('; '),
-        e.publisher, e.rating||0, e.priority ? 'Yes':'No', e.revisit ? 'Yes':'No', e.thoughts, e.streamNote,
+        e.song, artistName(e), alb?alb.title:'', labelName(e), e.isrc, credits, (e.tags||[]).join('; '),
+        e.rating||0, e.priority?'Yes':'No', e.revisit?'Yes':'No', e.thoughts, e.streamNote,
         e.spotifyLink, e.youtubeLink, new Date(e.createdAt).toLocaleDateString()
       ].map(csvEscape).join(',');
     });
     const csv = headers.join(',') + '\n' + rows.join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'songcard-export.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'songcard-export.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     toast('CSV downloaded');
   }
 
-  // ===== CSV import (matches the export format above) =====
   function parseCsv(text){
-    const rows = [];
-    let row = [], field = '', inQuotes = false;
+    const rows = []; let row = [], field = '', inQuotes = false;
     for(let i=0;i<text.length;i++){
       const c = text[i], next = text[i+1];
       if(inQuotes){
@@ -1124,12 +1023,28 @@
         if(c === '"'){ inQuotes = true; }
         else if(c === ','){ row.push(field); field=''; }
         else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
-        else if(c === '\r'){ /* skip */ }
+        else if(c === '\r'){ }
         else { field += c; }
       }
     }
     if(field.length || row.length){ row.push(field); rows.push(row); }
     return rows.filter(function(r){ return r.length>1 || (r[0]||'').trim()!==''; });
+  }
+  function findDuplicate(song, artist, excludeId){
+    const s = (song||'').trim().toLowerCase(); const a = (artist||'').trim().toLowerCase();
+    return entries.find(function(x){ return x.id !== excludeId && (x.song||'').trim().toLowerCase()===s && artistName(x).trim().toLowerCase()===a; });
+  }
+  function parseCreditsField(text){
+    if(!text) return [];
+    return text.split(';').map(function(piece){
+      piece = piece.trim(); if(!piece) return null;
+      const m = piece.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+      const writerName = m ? m[1].trim() : piece;
+      const pubName = m ? m[2].trim() : '';
+      const w = findOrCreateEntity('writer', writerName);
+      const p = pubName ? findOrCreateEntity('publisher', pubName) : null;
+      return w ? { writerId: w.id, publisherId: p ? p.id : '' } : null;
+    }).filter(Boolean);
   }
   async function importCsv(file){
     const text = await file.text();
@@ -1137,10 +1052,10 @@
     if(rows.length < 2){ toast('That file looks empty'); return; }
     const headers = rows[0].map(function(h){ return h.trim().toLowerCase(); });
     const idx = function(name){ return headers.indexOf(name.toLowerCase()); };
-    const iSong=idx('Song'), iArtist=idx('Artist'), iAlbum=idx('Album'), iIsrc=idx('ISRC'),
-      iWriters=idx('Songwriters'), iTags=idx('Tags'), iPub=idx('Publisher'), iRating=idx('Rating'),
+    const iSong=idx('Song'), iArtist=idx('Artist'), iAlbum=idx('Album'), iLabel=idx('Label'), iIsrc=idx('ISRC'),
+      iCredits=idx('Songwriter Credits'), iOldWriters=idx('Songwriters'), iTags=idx('Tags'), iRating=idx('Rating'),
       iPriority=idx('Priority'), iRevisit=idx('Revisit'), iThoughts=idx('Thoughts'),
-      iStream=idx('Streams/Status'), iSpotify=idx('Spotify Link'), iYoutube=idx('YouTube Link');
+      iStream=idx('Streams/Status'), iSpotify=idx('Spotify Link'), iYoutube=idx('YouTube Link'), iPub=idx('Publisher');
     if(iSong === -1){ toast('Couldn\u2019t find a "Song" column — is this a SongCard export?'); return; }
 
     let added = 0, skipped = 0;
@@ -1148,29 +1063,34 @@
       const row = rows[r];
       const song = (row[iSong]||'').trim();
       if(!song) continue;
-      const artist = (iArtist>-1 ? row[iArtist] : '') || '';
-      if(findDuplicate(song, artist, null)){ skipped++; continue; }
+      const artistTxt = (iArtist>-1 ? row[iArtist] : '') || '';
+      if(findDuplicate(song, artistTxt, null)){ skipped++; continue; }
 
       let albumId = '';
       const albumTitle = (iAlbum>-1 ? row[iAlbum] : '').trim();
       if(albumTitle){
         let alb = albums.find(function(a){ return (a.title||'').toLowerCase() === albumTitle.toLowerCase(); });
-        if(!alb){
-          alb = { id: 'alb' + Date.now() + Math.random().toString(36).slice(2,7), title: albumTitle, artist: artist, releaseDate: '', notes: '' };
-          albums.push(alb);
-        }
+        if(!alb){ alb = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: albumTitle, artist: artistTxt, releaseDate: '', notes: '' }; albums.push(alb); }
         albumId = alb.id;
+      }
+      let artistId = '';
+      if(artistTxt){ const a = findOrCreateEntity('artist', artistTxt); if(a) artistId = a.id; }
+      let labelId = '';
+      const labelTxt = (iLabel>-1 ? row[iLabel] : (iPub>-1 ? row[iPub] : '')).trim();
+      if(labelTxt){ const l = findOrCreateEntity('label', labelTxt); if(l) labelId = l.id; }
+
+      let writerCredits = [];
+      if(iCredits>-1 && row[iCredits]){ writerCredits = parseCreditsField(row[iCredits]); }
+      else if(iOldWriters>-1 && row[iOldWriters]){
+        writerCredits = row[iOldWriters].split(';').map(function(n){ const w=findOrCreateEntity('writer',n.trim()); return w?{writerId:w.id,publisherId:''}:null; }).filter(Boolean);
       }
 
       entries.push({
-        id: 'e' + Date.now() + Math.random().toString(36).slice(2,7),
-        song: song,
-        artist: artist,
-        albumId: albumId,
+        id: 'e'+Date.now()+Math.random().toString(36).slice(2,7),
+        song: song, artistId: artistId, albumId: albumId, labelId: labelId,
         isrc: (iIsrc>-1 ? row[iIsrc] : '') || '',
-        songwriters: (iWriters>-1 && row[iWriters]) ? row[iWriters].split(';').map(function(s){return s.trim();}).filter(Boolean) : [],
+        writerCredits: writerCredits,
         tags: (iTags>-1 && row[iTags]) ? row[iTags].split(';').map(function(s){return s.trim();}).filter(Boolean) : [],
-        publisher: (iPub>-1 ? row[iPub] : '') || '',
         rating: iRating>-1 ? (parseInt(row[iRating],10) || 0) : 0,
         priority: iPriority>-1 ? /yes/i.test(row[iPriority]) : false,
         revisit: iRevisit>-1 ? /yes/i.test(row[iRevisit]) : false,
@@ -1182,22 +1102,29 @@
       });
       added++;
     }
-    await saveAlbums();
-    await saveEntries();
+    await saveEntityArray('artist'); await saveEntityArray('label'); await saveEntityArray('writer'); await saveEntityArray('publisher');
+    await saveAlbums(); await saveEntries();
     toast('Imported ' + added + ' song' + (added===1?'':'s') + (skipped ? ', skipped ' + skipped + ' duplicate' + (skipped===1?'':'s') : ''));
     render();
   }
 
-  // ===== Duplicate check =====
-  function findDuplicate(song, artist, excludeId){
-    const s = song.trim().toLowerCase();
-    const a = artist.trim().toLowerCase();
-    return entries.find(function(x){
-      return x.id !== excludeId && (x.song||'').trim().toLowerCase() === s && (x.artist||'').trim().toLowerCase() === a;
-    });
+  function buildDatalist(id, type){
+    const opts = entityArray(type).map(function(x){ return '<option value="'+esc(x.name)+'">'; }).join('');
+    return '<datalist id="'+id+'">'+opts+'</datalist>';
   }
 
-  // ===== Modal =====
+  function addCreditRow(overlay, writerVal, publisherVal){
+    const wrap = overlay.querySelector('#creditRows');
+    const row = document.createElement('div');
+    row.className = 'credit-row';
+    row.innerHTML =
+      '<input type="text" class="credit-writer" list="writerNamesList" placeholder="Songwriter name" value="'+esc(writerVal||'')+'">' +
+      '<input type="text" class="credit-publisher" list="publisherNamesList" placeholder="Their publisher (optional)" value="'+esc(publisherVal||'')+'">' +
+      '<button type="button" class="credit-remove" aria-label="Remove this songwriter">\u00d7</button>';
+    row.querySelector('.credit-remove').addEventListener('click', function(){ row.remove(); });
+    wrap.appendChild(row);
+  }
+
   function openModal(id){
     const e = id ? entries.find(function(x){ return x.id===id; }) : null;
     const overlay = document.createElement('div');
@@ -1205,45 +1132,48 @@
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (e ? 'Edit card' : 'New card') + '</h2>' +
-        '<div class="sub">' + (e ? 'Update this song&rsquo;s entry' : 'Log a song, its writers, and your take') + '</div>' +
-        '<div class="field"><label for="f-song">Song title</label><input id="f-song" type="text" value="' + (e?esc(e.song):'') + '" placeholder="e.g. Slow Static"></div>' +
+        '<div class="sub">' + (e ? 'Update this song\u2019s entry' : 'Log a song, its writers, and your take') + '</div>' +
+        '<div class="field"><label>Song title</label><input id="f-song" type="text" value="' + (e?esc(e.song):'') + '" placeholder="e.g. Slow Static"></div>' +
         '<div class="field-row">' +
-          '<div class="field"><label for="f-artist">Artist</label><input id="f-artist" type="text" value="' + (e?esc(e.artist):'') + '" placeholder="Who released it"></div>' +
-          '<div class="field"><label for="f-publisher">Publisher / label</label><input id="f-publisher" type="text" value="' + (e?esc(e.publisher||''):'') + '" placeholder="If known"></div>' +
+          '<div class="field"><label>Artist</label><input id="f-artist" type="text" list="artistNamesList" value="' + (e?esc(artistName(e)):'') + '" placeholder="Who released it"></div>' +
+          '<div class="field"><label>Label</label><input id="f-label" type="text" list="labelNamesList" value="' + (e?esc(labelName(e)):'') + '" placeholder="Record label"></div>' +
         '</div>' +
+        buildDatalist('artistNamesList','artist') + buildDatalist('labelNamesList','label') + buildDatalist('writerNamesList','writer') + buildDatalist('publisherNamesList','publisher') +
         '<div class="lookup-box">' +
           '<div class="lookup-title">Auto-fill from MusicBrainz (optional)</div>' +
-          '<div class="lookup-row"><button type="button" class="lookup-btn" id="lookupTitleBtn">🔎 Fill from title + artist above</button></div>' +
-          '<div class="lookup-row"><input id="f-isrc" type="text" value="' + (e?esc(e.isrc||''):'') + '" placeholder="Or paste an ISRC code (e.g. USRC17607839)"><button type="button" class="lookup-btn" id="lookupIsrcBtn">🔎 Fill from ISRC</button></div>' +
-          '<div class="lookup-status" id="lookupStatus">Fills in song, artist, writers, publisher, and ISRC where the source has them listed. Coverage is spotty for smaller artists — always check before saving.</div>' +
+          '<div class="lookup-row"><button type="button" class="lookup-btn" id="lookupTitleBtn">Fill from title + artist above</button></div>' +
+          '<div class="lookup-row"><input id="f-isrc" type="text" value="' + (e?esc(e.isrc||''):'') + '" placeholder="Or paste an ISRC code"><button type="button" class="lookup-btn" id="lookupIsrcBtn">Fill from ISRC</button></div>' +
+          '<div class="lookup-status" id="lookupStatus">Fills song, artist, writers, label, and ISRC where the source has them. Publishers aren\u2019t covered by MusicBrainz — add those per writer below, or check BMI Songview.</div>' +
         '</div>' +
-        '<div class="field"><label for="f-writers">Songwriter(s)</label><input id="f-writers" type="text" value="' + (e?esc((e.songwriters||[]).join(', ')):'') + '" placeholder="Comma-separated, e.g. Jane Doe, Sam Rivers"><div class="hint">Separate multiple writers with commas.</div></div>' +
-        '<div class="field"><label for="f-album">Album (optional)</label><select id="f-album">' +
-          '<option value="">— No album —</option>' +
+        '<div class="field">' +
+          '<label>Songwriter(s) &amp; their publisher</label>' +
+          '<div id="creditRows"></div>' +
+          '<button type="button" class="add-credit-btn" id="addCreditBtn">+ Add songwriter</button>' +
+          '<div class="hint">Each songwriter can have a different publisher on the same song \u2014 leave publisher blank if you don\u2019t know it yet.</div>' +
+        '</div>' +
+        '<div class="field"><label>Album (optional)</label><select id="f-album">' +
+          '<option value="">\u2014 No album \u2014</option>' +
           albums.slice().sort(function(x,y){return (x.title||'').localeCompare(y.title||'');}).map(function(alb){
-            return '<option value="' + esc(alb.id) + '"' + (e && e.albumId===alb.id ? ' selected' : '') + '>' + esc(alb.title) + (alb.artist ? ' — ' + esc(alb.artist) : '') + '</option>';
+            return '<option value="'+esc(alb.id)+'"'+(e && e.albumId===alb.id?' selected':'')+'>'+esc(alb.title)+(alb.artist?' \u2014 '+esc(alb.artist):'')+'</option>';
           }).join('') +
           '<option value="__new__">+ Create new album</option>' +
         '</select></div>' +
         '<div class="lookup-box" id="newAlbumBox" style="display:none;">' +
           '<div class="lookup-title">New album</div>' +
           '<div class="field" style="margin-bottom:8px;"><input id="na-title" type="text" placeholder="Album title"></div>' +
-          '<div class="field-row">' +
-            '<div class="field" style="margin-bottom:0;"><input id="na-artist" type="text" placeholder="Album artist" value="' + (e?esc(e.artist):'') + '"></div>' +
-            '<div class="field" style="margin-bottom:0;"><input id="na-date" type="text" placeholder="Release date (optional)"></div>' +
-          '</div>' +
+          '<div class="field-row"><div class="field" style="margin-bottom:0;"><input id="na-artist" type="text" placeholder="Album artist" value="'+(e?esc(artistName(e)):'')+'"></div><div class="field" style="margin-bottom:0;"><input id="na-date" type="text" placeholder="Release date (optional)"></div></div>' +
         '</div>' +
-        '<div class="field"><label for="f-tags">Genre / mood tags</label><input id="f-tags" type="text" value="' + (e?esc((e.tags||[]).join(', ')):'') + '" placeholder="e.g. bedroom pop, moody, sub-3min"><div class="hint">Comma-separated — filterable in the Tags view.</div></div>' +
+        '<div class="field"><label>Genre / mood tags</label><input id="f-tags" type="text" value="' + (e?esc((e.tags||[]).join(', ')):'') + '" placeholder="e.g. bedroom pop, moody"></div>' +
         '<div class="field"><label>Your rating</label><div class="star-picker" id="starPicker"></div></div>' +
-        '<div class="field"><label for="f-thoughts">Your thoughts</label><textarea id="f-thoughts" placeholder="What stood out, why you\u2019re tracking it…">' + (e?esc(e.thoughts):'') + '</textarea></div>' +
+        '<div class="field"><label>Your thoughts</label><textarea id="f-thoughts" placeholder="What stood out…">' + (e?esc(e.thoughts):'') + '</textarea></div>' +
         '<div class="field-row">' +
-          '<div class="field"><label for="f-spotify">Spotify link (optional)</label><div class="lookup-row"><input id="f-spotify" type="text" value="' + (e?esc(e.spotifyLink||''):'') + '" placeholder="Paste track URL"><button type="button" class="lookup-btn" id="lookupSpotifyBtn">🔎 Auto-fill everything</button></div></div>' +
-          '<div class="field"><label for="f-youtube">YouTube link (optional)</label><input id="f-youtube" type="text" value="' + (e?esc(e.youtubeLink||''):'') + '" placeholder="Paste video URL"></div>' +
+          '<div class="field"><label>Spotify link (optional)</label><div class="lookup-row"><input id="f-spotify" type="text" value="' + (e?esc(e.spotifyLink||''):'') + '" placeholder="Paste track URL"><button type="button" class="lookup-btn" id="lookupSpotifyBtn">Auto-fill everything</button></div></div>' +
+          '<div class="field"><label>YouTube link (optional)</label><input id="f-youtube" type="text" value="' + (e?esc(e.youtubeLink||''):'') + '" placeholder="Paste video URL"></div>' +
         '</div>' +
-        '<div class="field"><label for="f-stream">Streams / status (optional)</label><input id="f-stream" type="text" value="' + (e?esc(e.streamNote||''):'') + '" placeholder="e.g. 40k on Spotify as of Aug, climbing"></div>' +
+        '<div class="field"><label>Streams / status (optional)</label><input id="f-stream" type="text" value="' + (e?esc(e.streamNote||''):'') + '" placeholder="e.g. 40k on Spotify"></div>' +
         '<div class="flag-toggles">' +
-          '<div class="like-toggle priority"><span>Priority lead</span><button type="button" id="priorityBtn" class="' + (e && e.priority ? 'on':'') + '">' + (e && e.priority ? '🔥 Flagged' : '🔥 Flag it') + '</button></div>' +
-          '<div class="like-toggle"><span>Revisit later</span><button type="button" id="revisitBtn" class="' + (e && e.revisit ? 'on':'') + '">' + (e && e.revisit ? '⏱ Flagged' : '⏱ Flag it') + '</button></div>' +
+          '<div class="like-toggle priority"><span>Priority lead</span><button type="button" id="priorityBtn" class="' + (e && e.priority?'on':'') + '">' + (e && e.priority?'Flagged':'Flag it') + '</button></div>' +
+          '<div class="like-toggle"><span>Revisit later</span><button type="button" id="revisitBtn" class="' + (e && e.revisit?'on':'') + '">' + (e && e.revisit?'Flagged':'Flag it') + '</button></div>' +
         '</div>' +
         '<div class="modal-actions">' +
           (e ? '<button class="btn btn-danger" id="deleteBtn" type="button">Delete</button>' : '') +
@@ -1253,19 +1183,24 @@
       '</div>';
     document.body.appendChild(overlay);
 
+    if(e && e.writerCredits && e.writerCredits.length){
+      e.writerCredits.forEach(function(c){
+        const w = findEntityById('writer', c.writerId); const p = findEntityById('publisher', c.publisherId);
+        addCreditRow(overlay, w?w.name:'', p?p.name:'');
+      });
+    } else {
+      addCreditRow(overlay, '', '');
+    }
+    overlay.querySelector('#addCreditBtn').addEventListener('click', function(){ addCreditRow(overlay, '', ''); });
+
     let rating = e ? (e.rating||0) : 0;
     const starPicker = overlay.querySelector('#starPicker');
     function renderStars(){
       starPicker.innerHTML = '';
       for(let i=1;i<=5;i++){
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = i<=rating ? '★' : '☆';
-        b.className = i<=rating ? 'filled' : '';
-        b.addEventListener('click', function(){
-          rating = (rating===i) ? i-1 : i;
-          renderStars();
-        });
+        const b = document.createElement('button'); b.type='button';
+        b.textContent = i<=rating ? '\u2605' : '\u2606'; b.className = i<=rating?'filled':'';
+        b.addEventListener('click', function(){ rating = (rating===i)?i-1:i; renderStars(); });
         starPicker.appendChild(b);
       }
     }
@@ -1273,25 +1208,14 @@
 
     const albumSelect = overlay.querySelector('#f-album');
     const newAlbumBox = overlay.querySelector('#newAlbumBox');
-    albumSelect.addEventListener('change', function(){
-      newAlbumBox.style.display = (albumSelect.value === '__new__') ? 'block' : 'none';
-    });
+    albumSelect.addEventListener('change', function(){ newAlbumBox.style.display = (albumSelect.value === '__new__') ? 'block' : 'none'; });
 
     let revisit = !!(e && e.revisit);
     const revisitBtn = overlay.querySelector('#revisitBtn');
-    revisitBtn.addEventListener('click', function(){
-      revisit = !revisit;
-      revisitBtn.classList.toggle('on', revisit);
-      revisitBtn.textContent = revisit ? '⏱ Flagged' : '⏱ Flag it';
-    });
-
+    revisitBtn.addEventListener('click', function(){ revisit = !revisit; revisitBtn.classList.toggle('on', revisit); revisitBtn.textContent = revisit?'Flagged':'Flag it'; });
     let priority = !!(e && e.priority);
     const priorityBtn = overlay.querySelector('#priorityBtn');
-    priorityBtn.addEventListener('click', function(){
-      priority = !priority;
-      priorityBtn.classList.toggle('on', priority);
-      priorityBtn.textContent = priority ? '🔥 Flagged' : '🔥 Flag it';
-    });
+    priorityBtn.addEventListener('click', function(){ priority = !priority; priorityBtn.classList.toggle('on', priority); priorityBtn.textContent = priority?'Flagged':'Flag it'; });
 
     overlay.querySelector('#lookupTitleBtn').addEventListener('click', function(){ runLookup(overlay, 'title'); });
     overlay.querySelector('#lookupIsrcBtn').addEventListener('click', function(){ runLookup(overlay, 'isrc'); });
@@ -1303,18 +1227,14 @@
     if(e){
       overlay.querySelector('#deleteBtn').addEventListener('click', async function(){
         entries = entries.filter(function(x){ return x.id!==e.id; });
-        overlay.remove();
-        await saveEntries();
-        toast('Card deleted');
-        render();
+        overlay.remove(); await saveEntries(); toast('Card deleted'); render();
       });
     }
 
     overlay.querySelector('#saveBtn').addEventListener('click', async function(){
       const song = overlay.querySelector('#f-song').value.trim();
-      const artist = overlay.querySelector('#f-artist').value.trim();
-      const publisher = overlay.querySelector('#f-publisher').value.trim();
-      const writersRaw = overlay.querySelector('#f-writers').value.trim();
+      const artistTxt = overlay.querySelector('#f-artist').value.trim();
+      const labelTxt = overlay.querySelector('#f-label').value.trim();
       const tagsRaw = overlay.querySelector('#f-tags').value.trim();
       const thoughts = overlay.querySelector('#f-thoughts').value.trim();
       const spotifyLink = overlay.querySelector('#f-spotify').value.trim();
@@ -1323,14 +1243,25 @@
       const isrc = overlay.querySelector('#f-isrc').value.trim();
       if(!song){ toast('Give the song a title first'); return; }
 
-      const dup = findDuplicate(song, artist, e ? e.id : null);
+      const dup = findDuplicate(song, artistTxt, e ? e.id : null);
       if(dup){
-        const proceed = confirm('You already have a card for "' + song + '" by ' + (artist || 'this artist') + '. Add it again anyway?');
+        const proceed = confirm('You already have a card for "' + song + '" by ' + (artistTxt || 'this artist') + '. Add it again anyway?');
         if(!proceed) return;
       }
 
-      const songwriters = writersRaw ? writersRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
       const tags = tagsRaw ? tagsRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      const artistId = artistTxt ? (findOrCreateEntity('artist', artistTxt) || {}).id || '' : '';
+      const labelId = labelTxt ? (findOrCreateEntity('label', labelTxt) || {}).id || '' : '';
+
+      const writerCredits = [];
+      overlay.querySelectorAll('.credit-row').forEach(function(row){
+        const wName = row.querySelector('.credit-writer').value.trim();
+        const pName = row.querySelector('.credit-publisher').value.trim();
+        if(!wName) return;
+        const w = findOrCreateEntity('writer', wName);
+        const p = pName ? findOrCreateEntity('publisher', pName) : null;
+        if(w) writerCredits.push({ writerId: w.id, publisherId: p ? p.id : '' });
+      });
 
       let albumId = albumSelect.value;
       let albumsChanged = false;
@@ -1339,23 +1270,22 @@
         if(!naTitle){ toast('Give the new album a title, or pick "No album"'); return; }
         const naArtist = overlay.querySelector('#na-artist').value.trim();
         const naDate = overlay.querySelector('#na-date').value.trim();
-        const newAlbum = { id: 'alb' + Date.now() + Math.random().toString(36).slice(2,7), title: naTitle, artist: naArtist, releaseDate: naDate, notes: '' };
-        albums.push(newAlbum);
-        albumId = newAlbum.id;
-        albumsChanged = true;
+        const newAlbum = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: naTitle, artist: naArtist, releaseDate: naDate, notes: '' };
+        albums.push(newAlbum); albumId = newAlbum.id; albumsChanged = true;
       }
 
       if(e){
-        Object.assign(e, {song, artist, publisher, songwriters, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId});
-      }else{
+        Object.assign(e, {song, artistId, labelId, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId, writerCredits});
+      } else {
         entries.push({
-          id: 'e' + Date.now() + Math.random().toString(36).slice(2,7),
-          song, artist, publisher, songwriters, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId,
+          id: 'e'+Date.now()+Math.random().toString(36).slice(2,7),
+          song, artistId, labelId, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId, writerCredits,
           createdAt: Date.now()
         });
       }
       overlay.remove();
       if(albumsChanged){ await saveAlbums(); }
+      await saveEntityArray('artist'); await saveEntityArray('label'); await saveEntityArray('writer'); await saveEntityArray('publisher');
       await saveEntries();
       toast(e ? 'Card updated' : 'Card added');
       render();
@@ -1366,7 +1296,10 @@
 
   document.getElementById('openAdd').addEventListener('click', function(){ openModal(null); });
   tabSongs.addEventListener('click', function(){ view='songs'; render(); });
-  tabWriters.addEventListener('click', function(){ view='writers'; render(); });
+  tabWriters.addEventListener('click', function(){ view='entityIndex'; entityIndexType='writer'; render(); });
+  tabArtists.addEventListener('click', function(){ view='entityIndex'; entityIndexType='artist'; render(); });
+  tabPublishers.addEventListener('click', function(){ view='entityIndex'; entityIndexType='publisher'; render(); });
+  tabLabels.addEventListener('click', function(){ view='entityIndex'; entityIndexType='label'; render(); });
   tabTags.addEventListener('click', function(){ view='tags'; render(); });
   tabAlbums.addEventListener('click', function(){ view='albums'; render(); });
   tabStats.addEventListener('click', function(){ view='stats'; render(); });
@@ -1381,7 +1314,6 @@
     if(file){ importCsv(file); }
     ev.target.value = '';
   });
-
   document.getElementById('resetBtn').addEventListener('click', async function(){
     if(!confirm('Clear every card? This cannot be undone.')) return;
     entries = [];
