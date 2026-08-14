@@ -156,6 +156,12 @@
   .toast.show{opacity:1;}
   footer{position:relative; z-index:1; text-align:center; padding:20px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
   footer button{background:none; border:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:11px;}
+  .bulk-check{position:absolute; top:6px; left:6px; width:17px; height:17px; z-index:2; cursor:pointer;}
+  .bulk-bar{position:fixed; left:0; right:0; bottom:0; z-index:15; background:var(--ink); color:var(--card); padding:12px 20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-family:'IBM Plex Mono',monospace; font-size:12px; box-shadow:0 -3px 10px rgba(0,0,0,0.25);}
+  .bulk-bar input[type=text]{padding:7px 9px; border:1px solid var(--card); border-radius:2px; background:transparent; color:var(--card); font-family:inherit; font-size:12px;}
+  .bulk-bar button{padding:7px 11px; border:1px solid var(--card); border-radius:2px; background:transparent; color:var(--card); cursor:pointer; font-family:inherit; font-size:12px;}
+  .bulk-bar button:hover{background:var(--card); color:var(--ink);}
+  .bulk-bar .push-right{margin-left:auto;}
   @media (max-width:520px){ .writer-row{flex-direction:column; align-items:flex-start; gap:4px;} .writer-name{min-width:auto;} .field-row{flex-direction:column;} }
   @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
 </style>
@@ -192,6 +198,7 @@
   <button class="tabbtn" id="tabTags" type="button">Tags</button>
   <button class="tabbtn" id="tabAlbums" type="button">Albums</button>
   <button class="tabbtn" id="tabStats" type="button">Stats</button>
+  <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
   <button class="btn-add" id="openAdd" type="button">+ New card</button>
 </div>
 
@@ -208,6 +215,15 @@
 </footer>
 
 <div id="toast" class="toast"></div>
+<div id="bulkBar" class="bulk-bar" style="display:none;">
+  <span id="bulkCount">0 selected</span>
+  <input type="text" id="bulkTagInput" placeholder="tag to add">
+  <button id="bulkAddTagBtn" type="button">+ Tag</button>
+  <button id="bulkPriorityBtn" type="button">Mark priority</button>
+  <button id="bulkRevisitBtn" type="button">Mark revisit</button>
+  <button id="bulkDeleteBtn" type="button">Delete</button>
+  <button id="bulkDoneBtn" type="button" class="push-right">Done</button>
+</div>
 <div id="configWarning" style="display:none; position:fixed; inset:0; background:var(--kraft); z-index:50; align-items:center; justify-content:center; padding:24px;">
   <div class="modal" style="max-width:460px;">
     <h2>One setup step left</h2>
@@ -244,6 +260,8 @@
   let revisitOnly = false;
   let priorityOnly = false;
   let sortMode = 'new';
+  let bulkMode = false;
+  let bulkSelected = new Set();
 
   const ENTITY_META = {
     writer:    { label: 'Writer',    tab: 'tabWriters' },
@@ -342,6 +360,29 @@
       entityArray(type).push(e);
     }
     return e;
+  }
+
+  // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
+  function directChildIds(type, parentId){
+    if(type==='label') return labels.filter(function(l){ return l.parentLabelId===parentId; }).map(function(l){ return l.id; });
+    if(type==='publisher') return publishers.filter(function(p){ return p.administeredBy===parentId; }).map(function(p){ return p.id; });
+    return [];
+  }
+  function allDescendantIds(type, rootId){
+    const result = [];
+    const stack = [rootId];
+    const visited = new Set([rootId]);
+    while(stack.length){
+      const id = stack.pop();
+      directChildIds(type, id).forEach(function(childId){
+        if(!visited.has(childId)){ visited.add(childId); result.push(childId); stack.push(childId); }
+      });
+    }
+    return result;
+  }
+  function entityRollupIds(type, rootId){
+    if(type==='label' || type==='publisher') return [rootId].concat(allDescendantIds(type, rootId));
+    return [rootId];
   }
   async function saveEntityArray(type){
     try{
@@ -694,6 +735,7 @@
     }).join('');
     return '' +
     '<div class="card' + (e.priority ? ' is-priority' : '') + '" data-id="' + esc(e.id) + '">' +
+      (bulkMode ? '<input type="checkbox" class="bulk-check" data-bulk-id="'+esc(e.id)+'"'+(bulkSelected.has(e.id)?' checked':'')+'>' : '') +
       '<span class="tab">' + catalogNo + '</span>' +
       '<span class="punch" aria-hidden="true"></span>' +
       (flags ? '<span class="flag-row">' + flags + '</span>' : '') +
@@ -755,13 +797,23 @@
     const meta = ENTITY_META[type];
     const ent = findEntityById(type, id);
     if(!ent){ view='entityIndex'; entityIndexType=type; render(); return; }
-    let list = entries.filter(function(e){ return entryEntityIds(type,e).indexOf(id) !== -1 && matchesSearch(e,q); });
+    const rollupIds = entityRollupIds(type, id);
+    let list = entries.filter(function(e){
+      const eids = entryEntityIds(type,e);
+      return eids.some(function(eid){ return rollupIds.indexOf(eid) !== -1; }) && matchesSearch(e,q);
+    });
     list = applySort(applyFilters(list));
     let html = '<button class="back-link" id="backToEntity">\u2190 All ' + meta.label.toLowerCase() + 's</button>';
+    const directChildren = directChildIds(type, id).map(function(cid){ return findEntityById(type, cid); }).filter(Boolean);
+    const hasParent = (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId)) ||
+                       (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy));
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + '</div>' +
-      (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + '</div>' : '') +
+      (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + (ent.pro ? ' \u00b7 ' + esc(ent.pro) : '') + '</div>' : (ent.pro ? '<div class="publisher">PRO: ' + esc(ent.pro) + '</div>' : '')) +
+      (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId) ? '<div class="publisher">Imprint of <button data-entity-type="label" data-entity-id="'+esc(ent.parentLabelId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('label', ent.parentLabelId).name)+'</button></div>' : '') +
       (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy) ? '<div class="publisher">Administered / sub-published by <button data-entity-type="publisher" data-entity-id="'+esc(ent.administeredBy)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('publisher', ent.administeredBy).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
+      (directChildren.length ? '<div class="writers-label" style="margin-top:8px;">' + (type==='label' ? 'Imprints / sub-labels' : 'Sub-publishers') + '</div><div class="chip-row">' + directChildren.map(function(c){ return '<button class="chip" data-entity-type="'+type+'" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+'</button>'; }).join('') + '</div>' : '') +
+      ((type==='label'||type==='publisher') && contactsAtCompany(ent.name).length ? '<div class="writers-label" style="margin-top:8px;">People here</div><div class="chip-row">' + contactsAtCompany(ent.name).map(function(c){ return '<button class="chip chip-tag" data-open-contact="'+esc(c.id)+'">'+esc(c.name)+(c.role?' \u2014 '+esc(c.role):'')+'</button>'; }).join('') + '</div>' : '') +
       (type==='artist' && ent.managerContactId && findContactById(ent.managerContactId) ? '<div class="publisher">Manager: <button data-open-contact="'+esc(ent.managerContactId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findContactById(ent.managerContactId).name)+'</button></div>' : '') +
       (ent.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(ent.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
@@ -772,7 +824,12 @@
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
       '</div>' +
     '</div>';
-    html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
+    if(directChildren.length){
+      html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-' + (type==='label'?'label':'publisher') + (directChildren.length===1?'':'s') + '</div>';
+    }
+    if(!directChildren.length){
+      html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
+    }
     html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Attach this ' + meta.label.toLowerCase() + ' to a card to see it here.</div>';
     mainEl.innerHTML = html;
     document.getElementById('backToEntity').addEventListener('click', function(){ view='entityIndex'; entityIndexType=type; render(); });
@@ -814,10 +871,22 @@
     overlay.className = 'overlay';
     const showIpi = (type==='writer' || type==='publisher');
     const showAdmin = (type==='publisher');
+    const showParentLabel = (type==='label');
     const showManager = (type==='artist');
     let extraFields = '';
     if(showIpi){
-      extraFields += '<div class="field"><label>IPI number (optional)</label><input id="ent-ipi" type="text" value="' + (ent?esc(ent.ipi||''):'') + '" placeholder="e.g. 00123456789"><div class="hint">Look it up on the MLC\u2019s free public search if you don\u2019t have it handy.</div></div>';
+      extraFields += '<div class="field-row">' +
+        '<div class="field"><label>IPI number (optional)</label><input id="ent-ipi" type="text" value="' + (ent?esc(ent.ipi||''):'') + '" placeholder="e.g. 00123456789"></div>' +
+        '<div class="field"><label>PRO (optional)</label><select id="ent-pro"><option value=""'+(!ent||!ent.pro?' selected':'')+'>\u2014 Unknown \u2014</option>' +
+          ['ASCAP','BMI','SESAC','GMR','Other'].map(function(p){ return '<option value="'+p+'"'+(ent&&ent.pro===p?' selected':'')+'>'+p+'</option>'; }).join('') +
+        '</select></div>' +
+      '</div><div class="hint" style="margin-top:-8px; margin-bottom:14px;">Look either up on the MLC\u2019s or your PRO\u2019s free public search if you don\u2019t have it handy.</div>';
+    }
+    if(showParentLabel){
+      const otherLabels = labels.filter(function(l){ return !ent || l.id!==ent.id; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+      extraFields += '<div class="field"><label>Parent label / major (optional)</label><select id="ent-parent-label"><option value="">\u2014 None \u2014</option>' +
+          otherLabels.map(function(l){ return '<option value="'+esc(l.id)+'"'+(ent && ent.parentLabelId===l.id?' selected':'')+'>'+esc(l.name)+'</option>'; }).join('') +
+        '</select><div class="hint">If this is an imprint/sub-label, pick its major here \u2014 the major\u2019s page will then show everything under it.</div></div>';
     }
     if(showAdmin){
       const otherPubs = publishers.filter(function(p){ return !ent || p.id!==ent.id; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
@@ -865,9 +934,22 @@
       const notes = overlay.querySelector('#ent-notes').value.trim();
       if(!name){ toast('Give it a name first'); return; }
       const extra = {};
-      if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); }
+      if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); extra.pro = overlay.querySelector('#ent-pro').value; }
+      if(showParentLabel){
+        const chosenParent = overlay.querySelector('#ent-parent-label').value;
+        if(chosenParent && ent && (chosenParent===ent.id || allDescendantIds('label', ent.id).indexOf(chosenParent)!==-1)){
+          toast('Can\u2019t set that \u2014 it would create a loop (that label is under this one already)');
+          return;
+        }
+        extra.parentLabelId = chosenParent;
+      }
       if(showAdmin){
-        extra.administeredBy = overlay.querySelector('#ent-admin').value;
+        const chosenAdmin = overlay.querySelector('#ent-admin').value;
+        if(chosenAdmin && ent && (chosenAdmin===ent.id || allDescendantIds('publisher', ent.id).indexOf(chosenAdmin)!==-1)){
+          toast('Can\u2019t set that \u2014 it would create a loop (that publisher is under this one already)');
+          return;
+        }
+        extra.administeredBy = chosenAdmin;
         extra.administeredTerritory = overlay.querySelector('#ent-territory').value.trim();
       }
       let contactsChanged = false;
@@ -916,14 +998,27 @@
     });
   }
 
+  function findCompanyMatch(name){
+    if(!name) return null;
+    const lbl = findEntityByName('label', name);
+    if(lbl) return { type: 'label', ent: lbl };
+    const pub = findEntityByName('publisher', name);
+    if(pub) return { type: 'publisher', ent: pub };
+    return null;
+  }
+  function contactsAtCompany(name){
+    return contacts.filter(function(c){ return (c.company||'').trim().toLowerCase() === (name||'').trim().toLowerCase(); });
+  }
+
   function renderContactDetail(){
     const c = findContactById(contactDetailId);
     if(!c){ view='contacts'; render(); return; }
     const managed = artistsManagedBy(c.id);
+    const companyMatch = findCompanyMatch(c.company);
     let html = '<button class="back-link" id="backToContacts">\u2190 All contacts</button>';
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(c.name) + '</div>' +
-      '<div class="artist" style="margin-top:4px;">' + esc(c.role||'') + (c.company?' \u00b7 '+esc(c.company):'') + '</div>' +
+      '<div class="artist" style="margin-top:4px;">' + esc(c.role||'') + (c.company ? ' \u00b7 ' + (companyMatch ? '<button data-entity-type="'+companyMatch.type+'" data-entity-id="'+esc(companyMatch.ent.id)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;text-transform:none;letter-spacing:normal;">'+esc(c.company)+'</button>' : esc(c.company)) : '') + '</div>' +
       (c.email ? '<div class="publisher">Email: ' + esc(c.email) + '</div>' : '') +
       (c.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(c.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px;">' +
@@ -966,8 +1061,9 @@
         '<div class="field"><label>Name</label><input id="ct-name" type="text" value="' + (c?esc(c.name):'') + '" placeholder="Full name"></div>' +
         '<div class="field-row">' +
           '<div class="field"><label>Role</label><input id="ct-role" type="text" value="' + (c?esc(c.role||''):'') + '" placeholder="e.g. A&amp;R, Manager, Agent"></div>' +
-          '<div class="field"><label>Company</label><input id="ct-company" type="text" value="' + (c?esc(c.company||''):'') + '" placeholder="e.g. Mezz Entertainment"></div>' +
+          '<div class="field"><label>Company</label><input id="ct-company" type="text" list="companyNamesList" value="' + (c?esc(c.company||''):'') + '" placeholder="e.g. Mezz Entertainment"></div>' +
         '</div>' +
+        '<datalist id="companyNamesList">' + labels.concat(publishers).map(function(x){ return '<option value="'+esc(x.name)+'">'; }).join('') + '</datalist>' +
         '<div class="field"><label>Email (optional)</label><input id="ct-email" type="text" value="' + (c?esc(c.email||''):'') + '" placeholder="name@company.com"></div>' +
         '<div class="field"><label>Notes (optional)</label><textarea id="ct-notes">' + (c?esc(c.notes||''):'') + '</textarea></div>' +
         '<div class="modal-actions">' +
@@ -1143,6 +1239,14 @@
   }
 
   function attachCardHandlers(){
+    mainEl.querySelectorAll('.bulk-check').forEach(function(cb){
+      cb.addEventListener('click', function(ev){ ev.stopPropagation(); });
+      cb.addEventListener('change', function(){
+        const cid = cb.getAttribute('data-bulk-id');
+        if(cb.checked) bulkSelected.add(cid); else bulkSelected.delete(cid);
+        updateBulkBar();
+      });
+    });
     mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
       el.addEventListener('click', function(ev){
         ev.preventDefault();
@@ -1521,6 +1625,60 @@
     await saveEntries();
     toast('Catalog cleared');
     render();
+  });
+
+  function updateBulkBar(){
+    const bar = document.getElementById('bulkBar');
+    const count = document.getElementById('bulkCount');
+    if(!bulkMode){ bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    count.textContent = bulkSelected.size + ' selected';
+  }
+  document.getElementById('bulkModeToggle').addEventListener('click', function(){
+    bulkMode = !bulkMode;
+    if(!bulkMode) bulkSelected.clear();
+    document.getElementById('bulkModeToggle').classList.toggle('toggle-on', bulkMode);
+    render();
+    updateBulkBar();
+  });
+  document.getElementById('bulkAddTagBtn').addEventListener('click', async function(){
+    const tag = document.getElementById('bulkTagInput').value.trim();
+    if(!tag){ toast('Type a tag first'); return; }
+    if(bulkSelected.size===0){ toast('Select at least one card'); return; }
+    entries.forEach(function(e){ if(bulkSelected.has(e.id)){ if(!e.tags) e.tags=[]; if(e.tags.indexOf(tag)===-1) e.tags.push(tag); } });
+    await saveEntries();
+    toast('Tag added to ' + bulkSelected.size + ' card' + (bulkSelected.size===1?'':'s'));
+    document.getElementById('bulkTagInput').value = '';
+    render(); updateBulkBar();
+  });
+  document.getElementById('bulkPriorityBtn').addEventListener('click', async function(){
+    if(bulkSelected.size===0){ toast('Select at least one card'); return; }
+    entries.forEach(function(e){ if(bulkSelected.has(e.id)){ e.priority = true; } });
+    await saveEntries();
+    toast('Marked priority on ' + bulkSelected.size + ' card' + (bulkSelected.size===1?'':'s'));
+    render(); updateBulkBar();
+  });
+  document.getElementById('bulkRevisitBtn').addEventListener('click', async function(){
+    if(bulkSelected.size===0){ toast('Select at least one card'); return; }
+    entries.forEach(function(e){ if(bulkSelected.has(e.id)){ e.revisit = true; } });
+    await saveEntries();
+    toast('Flagged revisit on ' + bulkSelected.size + ' card' + (bulkSelected.size===1?'':'s'));
+    render(); updateBulkBar();
+  });
+  document.getElementById('bulkDeleteBtn').addEventListener('click', async function(){
+    if(bulkSelected.size===0){ toast('Select at least one card'); return; }
+    const n = bulkSelected.size;
+    if(!confirm('Delete ' + n + ' card' + (n===1?'':'s') + '? This cannot be undone.')) return;
+    entries = entries.filter(function(e){ return !bulkSelected.has(e.id); });
+    bulkSelected.clear();
+    await saveEntries();
+    toast('Deleted ' + n + ' card' + (n===1?'':'s'));
+    render(); updateBulkBar();
+  });
+  document.getElementById('bulkDoneBtn').addEventListener('click', function(){
+    bulkMode = false; bulkSelected.clear();
+    document.getElementById('bulkModeToggle').classList.remove('toggle-on');
+    render(); updateBulkBar();
   });
 
   loadEntries();
