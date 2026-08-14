@@ -777,7 +777,7 @@
       const expanded = expandedEntityIds.has(ent.id);
       let row = '<div class="writer-row" data-entity-row="' + esc(ent.id) + '" style="padding-left:' + (4 + depth*22) + 'px;">' +
         (kids.length ? '<button class="tree-toggle" data-toggle-id="'+esc(ent.id)+'" type="button">'+(expanded?'\u25be':'\u25b8')+'</button>' : '<span class="tree-toggle-spacer"></span>') +
-        '<div class="writer-name">' + esc(ent.name) + '</div>' +
+        '<div class="writer-name">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:8px; vertical-align:middle;">MAJOR</span>' : '') + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + (kids.length ? ' \u00b7 ' + kids.length + ' sub-' + (type==='label'?'label':'publisher') + (kids.length===1?'':'s') : '') + '</div>' +
       '</div>';
       if(expanded && kids.length){ row += renderEntityTreeRows(type, ent.id, depth+1); }
@@ -855,7 +855,7 @@
     const hasParent = (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId)) ||
                        (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy));
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
-      '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + '</div>' +
+      '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:9px; vertical-align:middle;">MAJOR</span>' : '') + '</div>' +
       (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + (ent.pro ? ' \u00b7 ' + esc(ent.pro) : '') + '</div>' : (ent.pro ? '<div class="publisher">PRO: ' + esc(ent.pro) + '</div>' : '')) +
       (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId) ? '<div class="publisher">Imprint of <button data-entity-type="label" data-entity-id="'+esc(ent.parentLabelId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('label', ent.parentLabelId).name)+'</button></div>' : '') +
       (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy) ? '<div class="publisher">Administered / sub-published by <button data-entity-type="publisher" data-entity-id="'+esc(ent.administeredBy)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('publisher', ent.administeredBy).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
@@ -953,17 +953,19 @@
       '</div><div class="hint" style="margin-top:-8px; margin-bottom:14px;">Look either up on the MLC\u2019s or your PRO\u2019s free public search if you don\u2019t have it handy.</div>';
     }
     if(showParentLabel){
-      const otherLabels = labels.filter(function(l){ return !ent || l.id!==ent.id; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+      extraFields += '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="ent-ismajor" style="width:auto;"'+(ent&&ent.isMajor?' checked':'')+'> This is a major (e.g. Warner, Sony, Universal)</label></div>';
+      const majorLabels = labels.filter(function(l){ return l.isMajor && (!ent || l.id!==ent.id); }).sort(function(a,b){ return a.name.localeCompare(b.name); });
       extraFields += '<div class="field"><label>Parent label / major (optional)</label><select id="ent-parent-label"><option value="">\u2014 None \u2014</option>' +
-          otherLabels.map(function(l){ return '<option value="'+esc(l.id)+'"'+(ent && ent.parentLabelId===l.id?' selected':'')+'>'+esc(l.name)+'</option>'; }).join('') +
-        '</select><div class="hint">If this is an imprint/sub-label, pick its major here \u2014 the major\u2019s page will then show everything under it.</div></div>';
+          majorLabels.map(function(l){ return '<option value="'+esc(l.id)+'"'+(ent && ent.parentLabelId===l.id?' selected':'')+'>'+esc(l.name)+'</option>'; }).join('') +
+        '</select><div class="hint">' + (majorLabels.length ? 'Only labels tagged as a major show up here.' : 'No labels are tagged as a major yet \u2014 tag one first, then it\u2019ll appear here to pick from.') + '</div></div>';
     }
     if(showAdmin){
-      const otherPubs = publishers.filter(function(p){ return !ent || p.id!==ent.id; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+      extraFields += '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="ent-ismajor" style="width:auto;"'+(ent&&ent.isMajor?' checked':'')+'> This is a major (e.g. Warner Chappell, Sony, Universal)</label></div>';
+      const majorPubs = publishers.filter(function(p){ return p.isMajor && (!ent || p.id!==ent.id); }).sort(function(a,b){ return a.name.localeCompare(b.name); });
       extraFields += '<div class="field-row">' +
         '<div class="field"><label>Administered / sub-published by (optional)</label><select id="ent-admin"><option value="">\u2014 None \u2014</option>' +
-          otherPubs.map(function(p){ return '<option value="'+esc(p.id)+'"'+(ent && ent.administeredBy===p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('') +
-        '</select></div>' +
+          majorPubs.map(function(p){ return '<option value="'+esc(p.id)+'"'+(ent && ent.administeredBy===p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('') +
+        '</select><div class="hint">' + (majorPubs.length ? 'Only publishers tagged as a major show up here.' : 'No publishers are tagged as a major yet.') + '</div></div>' +
         '<div class="field"><label>Territory (optional)</label><input id="ent-territory" type="text" value="'+(ent?esc(ent.administeredTerritory||''):'')+'" placeholder="e.g. UK &amp; Europe"></div>' +
       '</div>';
     }
@@ -1006,6 +1008,7 @@
       const extra = {};
       if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); extra.pro = overlay.querySelector('#ent-pro').value; }
       if(showParentLabel){
+        extra.isMajor = overlay.querySelector('#ent-ismajor').checked;
         const chosenParent = overlay.querySelector('#ent-parent-label').value;
         if(chosenParent && ent && (chosenParent===ent.id || allDescendantIds('label', ent.id).indexOf(chosenParent)!==-1)){
           toast('Can\u2019t set that \u2014 it would create a loop (that label is under this one already)');
@@ -1014,6 +1017,7 @@
         extra.parentLabelId = chosenParent;
       }
       if(showAdmin){
+        extra.isMajor = overlay.querySelector('#ent-ismajor').checked;
         const chosenAdmin = overlay.querySelector('#ent-admin').value;
         if(chosenAdmin && ent && (chosenAdmin===ent.id || allDescendantIds('publisher', ent.id).indexOf(chosenAdmin)!==-1)){
           toast('Can\u2019t set that \u2014 it would create a loop (that publisher is under this one already)');
