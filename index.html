@@ -764,22 +764,25 @@
   function renderEntityIndex(type){
     const meta = ENTITY_META[type];
     const map = entityUsageMap(type);
+    const allEnts = entityArray(type);
     let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newEntityBtn" type="button">+ New ' + meta.label.toLowerCase() + '</button></div>';
-    if(map.size===0){
+    if(allEnts.length===0){
       html += '<div class="empty"><strong>No ' + meta.label.toLowerCase() + 's yet</strong>Add one from a card, or create one directly here.</div>';
       mainEl.innerHTML = html;
       document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
       return;
     }
-    const rows = Array.from(map.entries()).sort(function(a,b){ return b[1].length-a[1].length || a[0].localeCompare(b[0]); });
-    html += '<div class="writer-index">' + rows.map(function(pair){
-      const ent = findEntityById(type, pair[0]);
-      const songs = pair[1];
-      const name = ent ? ent.name : '(unknown)';
-      return '<div class="writer-row" data-entity-row="' + esc(pair[0]) + '">' +
+    const rows = allEnts.slice().sort(function(a,b){
+      const aSongs = map.get(a.id) || [], bSongs = map.get(b.id) || [];
+      return bSongs.length-aSongs.length || a.name.localeCompare(b.name);
+    });
+    html += '<div class="writer-index">' + rows.map(function(ent){
+      const songs = map.get(ent.id) || [];
+      const name = ent.name;
+      return '<div class="writer-row" data-entity-row="' + esc(ent.id) + '">' +
         '<div class="writer-name">' + esc(name) + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
-        '<div class="writer-songs">' + songs.map(function(s){ const alb=findAlbum(s.albumId); return esc(s.song) + (alb ? ' (' + esc(alb.title) + ')' : ''); }).join(' \u00b7 ') + '</div>' +
+        '<div class="writer-songs">' + (songs.length ? songs.map(function(s){ const alb=findAlbum(s.albumId); return esc(s.song) + (alb ? ' (' + esc(alb.title) + ')' : ''); }).join(' \u00b7 ') : '<span style="font-style:italic;">not attached to any song yet</span>') + '</div>' +
         (type!=='publisher' && type!=='label' ? '<div class="writer-links"><a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(name) + '" onclick="event.stopPropagation()">Spotify \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(name) + '" onclick="event.stopPropagation()">Genius \u2197</a></div>' : '') +
       '</div>';
     }).join('') + '</div>';
