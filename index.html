@@ -56,8 +56,8 @@
   .search-wrap input{width:100%; padding:11px 14px 11px 34px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);}
   .search-wrap input:focus{outline:2px solid var(--teal); outline-offset:1px;}
   .search-wrap svg{position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.55;}
-  select#sortSelect{font-family:'IBM Plex Mono',monospace; font-size:12px; padding:10px 10px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); color:var(--ink);}
-  .tabbtn{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.04em; padding:10px 14px; border:1.5px solid var(--ink); border-radius:var(--radius); background:transparent; color:var(--ink); cursor:pointer; text-transform:uppercase;}
+  select#sortSelect, select#browseSelect{font-family:'IBM Plex Mono',monospace; font-size:12px; padding:9px 10px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); color:var(--ink);}
+  .tabbtn{font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:0.03em; padding:9px 12px; border:1.5px solid var(--ink); border-radius:var(--radius); background:transparent; color:var(--ink); cursor:pointer; text-transform:uppercase;}
   .tabbtn.active{background:var(--ink); color:var(--card);}
   .tabbtn.toggle-on{background:var(--teal); color:#fbf6e9; border-color:var(--teal);}
   .tabbtn.toggle-on.priority-on{background:var(--stamp); border-color:var(--stamp);}
@@ -67,8 +67,12 @@
   main{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:14px 20px 80px;}
   .empty{border:1.5px dashed var(--ink-soft); border-radius:var(--radius); padding:48px 20px; text-align:center; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:13px;}
   .empty strong{display:block; font-family:'Roboto Slab',serif; font-size:20px; color:var(--ink); margin-bottom:6px;}
-  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:22px 18px; margin-top:18px;}
-  .card{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); position:relative; box-shadow:3px 3px 0 rgba(33,29,24,0.14); padding:20px 16px 16px; display:flex; flex-direction:column; gap:9px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px 14px; margin-top:16px;}
+  .tree-toggle{background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink-soft); width:16px; flex:0 0 16px; text-align:center; padding:0;}
+  .tree-toggle:hover{color:var(--ink);}
+  .tree-toggle-spacer{display:inline-block; width:16px; flex:0 0 16px;}
+  .admin-through{font-size:10px; opacity:0.75;}
+  .card{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); position:relative; box-shadow:2px 2px 0 rgba(33,29,24,0.14); padding:18px 14px 14px; display:flex; flex-direction:column; gap:8px;}
   .card.is-priority{border-color:var(--stamp); box-shadow:3px 3px 0 rgba(161,59,46,0.28);}
   .card .tab{position:absolute; top:-13px; left:16px; background:var(--brown); color:#fbf6e9; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; padding:3px 9px; border-radius:2px; border:1.5px solid var(--ink);}
   .punch{position:absolute; top:9px; right:14px; width:8px; height:8px; border-radius:50%; background:var(--kraft); border:1px solid var(--line);}
@@ -190,14 +194,17 @@
   <button class="tabbtn" id="priorityToggle" type="button">Priority only</button>
   <button class="tabbtn" id="revisitToggle" type="button">Revisit only</button>
   <button class="tabbtn active" id="tabSongs" type="button">Songs</button>
-  <button class="tabbtn" id="tabWriters" type="button">Writers</button>
-  <button class="tabbtn" id="tabArtists" type="button">Artists</button>
-  <button class="tabbtn" id="tabPublishers" type="button">Publishers</button>
-  <button class="tabbtn" id="tabLabels" type="button">Labels</button>
-  <button class="tabbtn" id="tabContacts" type="button">Contacts</button>
-  <button class="tabbtn" id="tabTags" type="button">Tags</button>
-  <button class="tabbtn" id="tabAlbums" type="button">Albums</button>
-  <button class="tabbtn" id="tabStats" type="button">Stats</button>
+  <select id="browseSelect">
+    <option value="">Browse…</option>
+    <option value="writers">Writers</option>
+    <option value="artists">Artists</option>
+    <option value="publishers">Publishers</option>
+    <option value="labels">Labels</option>
+    <option value="contacts">Contacts</option>
+    <option value="tags">Tags</option>
+    <option value="albums">Albums</option>
+    <option value="stats">Stats</option>
+  </select>
   <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
   <button class="btn-add" id="openAdd" type="button">+ New card</button>
 </div>
@@ -262,12 +269,13 @@
   let sortMode = 'new';
   let bulkMode = false;
   let bulkSelected = new Set();
+  let expandedEntityIds = new Set();
 
   const ENTITY_META = {
-    writer:    { label: 'Writer',    tab: 'tabWriters' },
-    artist:    { label: 'Artist',    tab: 'tabArtists' },
-    publisher: { label: 'Publisher', tab: 'tabPublishers' },
-    label:     { label: 'Label',     tab: 'tabLabels' }
+    writer:    { label: 'Writer' },
+    artist:    { label: 'Artist' },
+    publisher: { label: 'Publisher' },
+    label:     { label: 'Label' }
   };
 
   const mainEl = document.getElementById('main');
@@ -275,14 +283,7 @@
   const searchInput = document.getElementById('searchInput');
   const sortSelect = document.getElementById('sortSelect');
   const tabSongs = document.getElementById('tabSongs');
-  const tabWriters = document.getElementById('tabWriters');
-  const tabArtists = document.getElementById('tabArtists');
-  const tabPublishers = document.getElementById('tabPublishers');
-  const tabLabels = document.getElementById('tabLabels');
-  const tabContacts = document.getElementById('tabContacts');
-  const tabTags = document.getElementById('tabTags');
-  const tabAlbums = document.getElementById('tabAlbums');
-  const tabStats = document.getElementById('tabStats');
+  const browseSelect = document.getElementById('browseSelect');
   const revisitToggle = document.getElementById('revisitToggle');
   const priorityToggle = document.getElementById('priorityToggle');
 
@@ -678,14 +679,17 @@
       : 'Loading catalog…';
 
     tabSongs.classList.toggle('active', view==='songs');
-    tabWriters.classList.toggle('active', (view==='entityIndex' && entityIndexType==='writer') || (view==='entityFilter' && entityFilterType==='writer'));
-    tabArtists.classList.toggle('active', (view==='entityIndex' && entityIndexType==='artist') || (view==='entityFilter' && entityFilterType==='artist'));
-    tabPublishers.classList.toggle('active', (view==='entityIndex' && entityIndexType==='publisher') || (view==='entityFilter' && entityFilterType==='publisher'));
-    tabLabels.classList.toggle('active', (view==='entityIndex' && entityIndexType==='label') || (view==='entityFilter' && entityFilterType==='label'));
-    tabContacts.classList.toggle('active', view==='contacts' || view==='contactDetail');
-    tabTags.classList.toggle('active', view==='tags' || view==='tagFilter');
-    tabAlbums.classList.toggle('active', view==='albums' || view==='albumFilter');
-    tabStats.classList.toggle('active', view==='stats');
+    let browseVal = '';
+    const activeEntityType = view==='entityIndex' ? entityIndexType : (view==='entityFilter' ? entityFilterType : null);
+    if(activeEntityType==='writer') browseVal = 'writers';
+    else if(activeEntityType==='artist') browseVal = 'artists';
+    else if(activeEntityType==='publisher') browseVal = 'publishers';
+    else if(activeEntityType==='label') browseVal = 'labels';
+    else if(view==='contacts' || view==='contactDetail'){ browseVal = 'contacts'; }
+    else if(view==='tags' || view==='tagFilter'){ browseVal = 'tags'; }
+    else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
+    else if(view==='stats'){ browseVal = 'stats'; }
+    browseSelect.value = browseVal;
     revisitToggle.classList.toggle('toggle-on', revisitOnly);
     priorityToggle.classList.toggle('toggle-on', priorityOnly);
     priorityToggle.classList.toggle('priority-on', priorityOnly);
@@ -761,9 +765,28 @@
     '</div>';
   }
 
+  function renderEntityTreeRows(type, parentId, depth){
+    const map = entityUsageMap(type);
+    const children = entityArray(type).filter(function(x){
+      const p = type==='label' ? (x.parentLabelId||'') : (x.administeredBy||'');
+      return p === (parentId||'');
+    }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+    return children.map(function(ent){
+      const kids = directChildIds(type, ent.id);
+      const songs = map.get(ent.id) || [];
+      const expanded = expandedEntityIds.has(ent.id);
+      let row = '<div class="writer-row" data-entity-row="' + esc(ent.id) + '" style="padding-left:' + (4 + depth*22) + 'px;">' +
+        (kids.length ? '<button class="tree-toggle" data-toggle-id="'+esc(ent.id)+'" type="button">'+(expanded?'\u25be':'\u25b8')+'</button>' : '<span class="tree-toggle-spacer"></span>') +
+        '<div class="writer-name">' + esc(ent.name) + '</div>' +
+        '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + (kids.length ? ' \u00b7 ' + kids.length + ' sub-' + (type==='label'?'label':'publisher') + (kids.length===1?'':'s') : '') + '</div>' +
+      '</div>';
+      if(expanded && kids.length){ row += renderEntityTreeRows(type, ent.id, depth+1); }
+      return row;
+    }).join('');
+  }
+
   function renderEntityIndex(type){
     const meta = ENTITY_META[type];
-    const map = entityUsageMap(type);
     const allEnts = entityArray(type);
     let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newEntityBtn" type="button">+ New ' + meta.label.toLowerCase() + '</button></div>';
     if(allEnts.length===0){
@@ -772,6 +795,27 @@
       document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
       return;
     }
+    if(type==='label' || type==='publisher'){
+      html += '<div class="writer-index">' + renderEntityTreeRows(type, '', 0) + '</div>';
+      mainEl.innerHTML = html;
+      document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
+      mainEl.querySelectorAll('[data-toggle-id]').forEach(function(btn){
+        btn.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          const tid = btn.getAttribute('data-toggle-id');
+          if(expandedEntityIds.has(tid)) expandedEntityIds.delete(tid); else expandedEntityIds.add(tid);
+          renderEntityIndex(type);
+        });
+      });
+      mainEl.querySelectorAll('[data-entity-row]').forEach(function(row){
+        row.addEventListener('click', function(){
+          entityFilterType = type; entityFilterId = row.getAttribute('data-entity-row');
+          view = 'entityFilter'; render();
+        });
+      });
+      return;
+    }
+    const map = entityUsageMap(type);
     const rows = allEnts.slice().sort(function(a,b){
       const aSongs = map.get(a.id) || [], bSongs = map.get(b.id) || [];
       return bSongs.length-aSongs.length || a.name.localeCompare(b.name);
@@ -783,7 +827,7 @@
         '<div class="writer-name">' + esc(name) + '</div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
         '<div class="writer-songs">' + (songs.length ? songs.map(function(s){ const alb=findAlbum(s.albumId); return esc(s.song) + (alb ? ' (' + esc(alb.title) + ')' : ''); }).join(' \u00b7 ') : '<span style="font-style:italic;">not attached to any song yet</span>') + '</div>' +
-        (type!=='publisher' && type!=='label' ? '<div class="writer-links"><a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(name) + '" onclick="event.stopPropagation()">Spotify \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(name) + '" onclick="event.stopPropagation()">Genius \u2197</a></div>' : '') +
+        '<div class="writer-links"><a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(name) + '" onclick="event.stopPropagation()">Spotify \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(name) + '" onclick="event.stopPropagation()">Genius \u2197</a></div>' +
       '</div>';
     }).join('') + '</div>';
     mainEl.innerHTML = html;
@@ -827,6 +871,29 @@
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
       '</div>' +
     '</div>';
+    if(type==='publisher'){
+      const seen = new Set();
+      const writerAdminEntries = [];
+      list.forEach(function(e){
+        (e.writerCredits||[]).forEach(function(c){
+          if(c.writerId && c.publisherId && rollupIds.indexOf(c.publisherId)!==-1){
+            const key = c.writerId+'|'+c.publisherId;
+            if(!seen.has(key)){ seen.add(key); writerAdminEntries.push(c); }
+          }
+        });
+      });
+      if(writerAdminEntries.length){
+        html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+          '<div class="writers-label">Songwriters under ' + esc(ent.name) + '</div>' +
+          '<div class="chip-row" style="margin-top:6px;">' + writerAdminEntries.map(function(c){
+            const w = findEntityById('writer', c.writerId);
+            const p = findEntityById('publisher', c.publisherId);
+            if(!w) return '';
+            return '<button class="chip" data-entity-type="writer" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+(p && p.id!==id ? ' <span class="admin-through">\u2014 admin through '+esc(p.name)+'</span>' : '')+'</button>';
+          }).join('') + '</div>' +
+        '</div>';
+      }
+    }
     if(directChildren.length){
       html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-' + (type==='label'?'label':'publisher') + (directChildren.length===1?'':'s') + '</div>';
     }
@@ -1603,14 +1670,19 @@
 
   document.getElementById('openAdd').addEventListener('click', function(){ openModal(null); });
   tabSongs.addEventListener('click', function(){ view='songs'; render(); });
-  tabWriters.addEventListener('click', function(){ view='entityIndex'; entityIndexType='writer'; render(); });
-  tabArtists.addEventListener('click', function(){ view='entityIndex'; entityIndexType='artist'; render(); });
-  tabPublishers.addEventListener('click', function(){ view='entityIndex'; entityIndexType='publisher'; render(); });
-  tabLabels.addEventListener('click', function(){ view='entityIndex'; entityIndexType='label'; render(); });
-  tabContacts.addEventListener('click', function(){ view='contacts'; render(); });
-  tabTags.addEventListener('click', function(){ view='tags'; render(); });
-  tabAlbums.addEventListener('click', function(){ view='albums'; render(); });
-  tabStats.addEventListener('click', function(){ view='stats'; render(); });
+  browseSelect.addEventListener('change', function(){
+    const v = browseSelect.value;
+    if(v==='writers'){ view='entityIndex'; entityIndexType='writer'; }
+    else if(v==='artists'){ view='entityIndex'; entityIndexType='artist'; }
+    else if(v==='publishers'){ view='entityIndex'; entityIndexType='publisher'; }
+    else if(v==='labels'){ view='entityIndex'; entityIndexType='label'; }
+    else if(v==='contacts'){ view='contacts'; }
+    else if(v==='tags'){ view='tags'; }
+    else if(v==='albums'){ view='albums'; }
+    else if(v==='stats'){ view='stats'; }
+    else { return; }
+    render();
+  });
   revisitToggle.addEventListener('click', function(){ revisitOnly = !revisitOnly; render(); });
   priorityToggle.addEventListener('click', function(){ priorityOnly = !priorityOnly; render(); });
   searchInput.addEventListener('input', render);
