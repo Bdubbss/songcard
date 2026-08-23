@@ -25,6 +25,7 @@
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -221,7 +222,11 @@
   <button id="exportBtn" type="button">Export CSV</button> ·
   <button id="importBtn" type="button">Import CSV</button>
   <input type="file" id="importFile" accept=".csv" style="display:none;"> ·
-  <button id="resetBtn" type="button">Clear all entries</button>
+  <button id="backupBtn" type="button">Full Backup (JSON)</button> ·
+  <button id="restoreBtn" type="button">Restore Backup</button>
+  <input type="file" id="restoreFile" accept=".json" style="display:none;"> ·
+  <button id="resetBtn" type="button">Clear all entries</button> ·
+  <button id="signOutBtn" type="button">Sign out</button>
 </footer>
 
 <div id="toast" class="toast"></div>
@@ -240,6 +245,14 @@
     <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">This copy of SongCard isn't connected to a database yet. Open the file, find the FIREBASE_CONFIG section near the top, and paste in your own Firebase project's config values. Follow the setup steps you were given, then reload this page.</div>
   </div>
 </div>
+<div id="authGate" style="display:none; position:fixed; inset:0; background:var(--kraft); z-index:55; align-items:center; justify-content:center; padding:24px;">
+  <div class="modal" style="max-width:380px; text-align:center;">
+    <div class="brand" style="justify-content:center; font-size:26px; margin-bottom:6px;"><span class="card-icon" aria-hidden="true"></span>SONGCARD</div>
+    <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px; margin-bottom:20px;">This is your private catalog. Sign in with the Google account tied to this project to view it.</div>
+    <button class="btn btn-primary" id="googleSignInBtn" type="button" style="width:100%;">Sign in with Google</button>
+    <div id="authError" style="margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--stamp);"></div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -251,6 +264,7 @@
   const PUBLISHER_STORAGE_KEY = 'song_publishers_v1';
   const LABEL_STORAGE_KEY = 'song_labels_v1';
   const CONTACT_STORAGE_KEY = 'song_contacts_v1';
+  const SCHEMA_VERSION = 1;
 
   let entries = [];
   let albums = [];
@@ -293,8 +307,10 @@
   // ===== Firestore setup =====
   const configIsPlaceholder = !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('PASTE_') === 0;
   let db = null;
+  let auth = null;
+  let currentUser = null;
   if(!configIsPlaceholder){
-    try{ firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); }
+    try{ firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); auth = firebase.auth(); }
     catch(err){ console.error('Firebase init failed', err); }
   }
   async function storageGet(key){
@@ -1439,6 +1455,63 @@
       return w ? { writerId: w.id, publisherId: p ? p.id : '', role: role || 'Songwriter' } : null;
     }).filter(Boolean);
   }
+  // ===== Full backup / restore (protects everything before any future schema change) =====
+  function exportFullBackup(){
+    const backup = {
+      schemaVersion: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      entries: entries,
+      albums: albums,
+      artists: artists,
+      writers: writers,
+      publishers: publishers,
+      labels: labels,
+      contacts: contacts
+    };
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'songcard-backup-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Full backup downloaded');
+  }
+  async function restoreFullBackup(file){
+    let data;
+    try{
+      const text = await file.text();
+      data = JSON.parse(text);
+    }catch(err){
+      toast('Could not read that file \u2014 is it a SongCard backup JSON?');
+      return;
+    }
+    if(!data || !Array.isArray(data.entries)){
+      toast('That doesn\u2019t look like a valid SongCard backup');
+      return;
+    }
+    const counts = 'Songs: ' + data.entries.length + ', Writers: ' + (data.writers||[]).length + ', Artists: ' + (data.artists||[]).length + ', Publishers: ' + (data.publishers||[]).length + ', Labels: ' + (data.labels||[]).length + ', Albums: ' + (data.albums||[]).length + ', Contacts: ' + (data.contacts||[]).length;
+    if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
+    entries = data.entries || [];
+    albums = data.albums || [];
+    artists = data.artists || [];
+    writers = data.writers || [];
+    publishers = data.publishers || [];
+    labels = data.labels || [];
+    contacts = data.contacts || [];
+    entries.forEach(normalize);
+    await saveEntries();
+    await saveAlbums();
+    await saveEntityArray('artist');
+    await saveEntityArray('writer');
+    await saveEntityArray('publisher');
+    await saveEntityArray('label');
+    await saveContacts();
+    toast('Backup restored');
+    view = 'songs'; render();
+  }
+
   async function importCsv(file){
     const text = await file.text();
     const rows = parseCsv(text);
@@ -1722,6 +1795,13 @@
     if(file){ importCsv(file); }
     ev.target.value = '';
   });
+  document.getElementById('backupBtn').addEventListener('click', exportFullBackup);
+  document.getElementById('restoreBtn').addEventListener('click', function(){ document.getElementById('restoreFile').click(); });
+  document.getElementById('restoreFile').addEventListener('change', function(ev){
+    const file = ev.target.files[0];
+    if(file){ restoreFullBackup(file); }
+    ev.target.value = '';
+  });
   document.getElementById('resetBtn').addEventListener('click', async function(){
     if(!confirm('Clear every card? This cannot be undone.')) return;
     entries = [];
@@ -1784,7 +1864,42 @@
     render(); updateBulkBar();
   });
 
-  loadEntries();
+  function showAuthGate(show){
+    document.getElementById('authGate').style.display = show ? 'flex' : 'none';
+  }
+  async function signIn(){
+    document.getElementById('authError').textContent = '';
+    try{
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await auth.signInWithPopup(provider);
+    }catch(err){
+      document.getElementById('authError').textContent = 'Sign-in failed \u2014 try again.';
+    }
+  }
+  async function signOutUser(){
+    if(auth) await auth.signOut();
+  }
+  document.getElementById('googleSignInBtn').addEventListener('click', signIn);
+  document.getElementById('signOutBtn').addEventListener('click', signOutUser);
+
+  if(configIsPlaceholder){
+    loadEntries();
+  } else if(auth){
+    auth.onAuthStateChanged(function(user){
+      currentUser = user;
+      if(user){
+        showAuthGate(false);
+        loadEntries();
+      } else {
+        showAuthGate(true);
+        loaded = true;
+        mainEl.innerHTML = '';
+        statsRow.textContent = 'Signed out.';
+      }
+    });
+  } else {
+    loadEntries();
+  }
 })();
 </script>
 </body>
