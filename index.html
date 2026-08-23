@@ -387,8 +387,41 @@
         written += chunk.length;
       }
       return { written: written };
+    },
+    async batchDelete(collectionName, ids){
+      if(!db || !ids.length) return { deleted: 0 };
+      let deleted = 0;
+      for(let i=0; i<ids.length; i+=450){
+        const chunk = ids.slice(i, i+450);
+        const batch = db.batch();
+        chunk.forEach(function(id){ batch.delete(db.collection(collectionName).doc(id)); });
+        await batch.commit();
+        deleted += chunk.length;
+      }
+      return { deleted: deleted };
     }
   };
+
+  // Keeps a normalized collection in sync with an in-memory array: writes every
+  // current record and deletes any document whose record is no longer present
+  // (covers single delete, bulk delete, clear-all, CSV import, and restore-from-backup
+  // uniformly, without any of those call sites needing to know about this layer).
+  // Failures here never throw past this point — the legacy blob write already
+  // happened in the caller, so no data is lost even if this sync fails.
+  async function syncNormalizedCollection(collectionName, currentRecords){
+    if(!db) return;
+    try{
+      const existing = await DataStore.getAll(collectionName);
+      const existingIds = existing.map(function(r){ return r.id; });
+      const currentIds = new Set(currentRecords.map(function(r){ return r.id; }));
+      const toDelete = existingIds.filter(function(id){ return !currentIds.has(id); });
+      if(toDelete.length){ await DataStore.batchDelete(collectionName, toDelete); }
+      if(currentRecords.length){ await DataStore.batchSet(collectionName, currentRecords); }
+    }catch(err){
+      console.error('Normalized sync failed for ' + collectionName, err);
+      toast('Couldn\u2019t sync "' + collectionName + '" to the normalized database \u2014 saved to backup storage instead');
+    }
+  }
 
   function toast(msg){
     const t = document.getElementById('toast');
@@ -467,6 +500,8 @@
       const res = await storageSet(entityStorageKey(type), JSON.stringify(entityArray(type)));
       if(!res){ toast('Save failed — try again'); }
     }catch(e){ toast('Save failed — try again'); }
+    const normalizedName = type==='artist' ? 'artists' : type==='person' ? 'people' : 'companies';
+    await syncNormalizedCollection(normalizedName, entityArray(type));
   }
   function entryEntityIds(type, e){
     if(type==='artist') return e.artistId ? [e.artistId] : [];
@@ -697,6 +732,32 @@
     }
   }
 
+  // Reads a collection with the normalized Firestore collection as the primary
+  // source. Falls back to the legacy blob only if the normalized read throws,
+  // or if it comes back empty while the legacy blob clearly has real data
+  // (a safety cross-check — that combination shouldn't happen after a
+  // successful migration, but this way a fluke never looks like empty data).
+  async function loadNormalizedOrLegacy(collectionName, legacyLoaderFn, label){
+    let normalizedDocs = null;
+    try{
+      normalizedDocs = await DataStore.getAll(collectionName);
+    }catch(err){
+      console.error('Normalized read failed for ' + collectionName, err);
+      toast('Couldn\u2019t reach the normalized database for ' + label + ' \u2014 using backup storage');
+      try{ return await legacyLoaderFn(); }catch(e2){ return []; }
+    }
+    if(normalizedDocs && normalizedDocs.length){ return normalizedDocs; }
+    try{
+      const legacy = await legacyLoaderFn();
+      if(legacy && legacy.length){
+        console.warn('Normalized collection "' + collectionName + '" was empty but legacy storage has ' + legacy.length + ' record(s) \u2014 using legacy as a precaution.');
+        toast('Using backup storage for ' + label + ' \u2014 normalized collection looked empty');
+        return legacy;
+      }
+    }catch(e3){ /* legacy also empty/unreachable — normalizedDocs (empty array) is the real answer */ }
+    return normalizedDocs || [];
+  }
+
   async function loadEntries(){
     if(configIsPlaceholder){
       loaded = true;
@@ -704,21 +765,25 @@
       statsRow.textContent = 'Not connected to a database yet — see setup instructions.';
       return;
     }
-    try{
+    entries = await loadNormalizedOrLegacy('songs', async function(){
       const res = await storageGet(STORAGE_KEY);
-      if(res && res.value){ entries = JSON.parse(res.value); }
-      else {
-        try{
-          const old = await storageGet(OLD_STORAGE_KEY);
-          entries = old && old.value ? JSON.parse(old.value) : [];
-        }catch(e2){ entries = []; }
-      }
-    }catch(e){ entries = []; }
-    try{ const r = await storageGet(ALBUM_STORAGE_KEY); albums = r && r.value ? JSON.parse(r.value) : []; }catch(e){ albums = []; }
-    try{ const r = await storageGet(ARTIST_STORAGE_KEY); artists = r && r.value ? JSON.parse(r.value) : []; }catch(e){ artists = []; }
+      if(res && res.value) return JSON.parse(res.value);
+      const old = await storageGet(OLD_STORAGE_KEY);
+      return old && old.value ? JSON.parse(old.value) : [];
+    }, 'songs');
+    albums = await loadNormalizedOrLegacy('releases', async function(){
+      const r = await storageGet(ALBUM_STORAGE_KEY); return r && r.value ? JSON.parse(r.value) : [];
+    }, 'releases');
+    artists = await loadNormalizedOrLegacy('artists', async function(){
+      const r = await storageGet(ARTIST_STORAGE_KEY); return r && r.value ? JSON.parse(r.value) : [];
+    }, 'artists');
     albums.forEach(normalizeRelease);
-    try{ const r = await storageGet(PERSON_STORAGE_KEY); people = r && r.value ? JSON.parse(r.value) : []; }catch(e){ people = []; }
-    try{ const r = await storageGet(COMPANY_STORAGE_KEY); companies = r && r.value ? JSON.parse(r.value) : []; }catch(e){ companies = []; }
+    people = await loadNormalizedOrLegacy('people', async function(){
+      const r = await storageGet(PERSON_STORAGE_KEY); return r && r.value ? JSON.parse(r.value) : [];
+    }, 'people');
+    companies = await loadNormalizedOrLegacy('companies', async function(){
+      const r = await storageGet(COMPANY_STORAGE_KEY); return r && r.value ? JSON.parse(r.value) : [];
+    }, 'companies');
     try{ const r = await storageGet(LEGACY_LABEL_STORAGE_KEY); legacyLabels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyLabels = []; }
     try{ const r = await storageGet(LEGACY_CONTACT_STORAGE_KEY); legacyContacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyContacts = []; }
     entries.forEach(normalize);
@@ -731,6 +796,7 @@
     if(entries.length){ saveEntries(); saveEntityArray('artist'); }
     if(albums.length){ saveAlbums(); saveEntityArray('artist'); }
   }
+
 
   // ===== One-time migration: legacy Publisher records get companyTypes/parentCompanyId; legacy Label records also become Company records (never auto-merged with an existing same-named Company) =====
   function migrateLabelsIntoCompanies(){
@@ -799,10 +865,12 @@
   async function saveEntries(){
     try{ const res = await storageSet(STORAGE_KEY, JSON.stringify(entries)); if(!res){ toast('Save failed — try again'); } }
     catch(e){ toast('Save failed — try again'); }
+    await syncNormalizedCollection('songs', entries);
   }
   async function saveAlbums(){
     try{ const res = await storageSet(ALBUM_STORAGE_KEY, JSON.stringify(albums)); if(!res){ toast('Save failed — try again'); } }
     catch(e){ toast('Save failed — try again'); }
+    await syncNormalizedCollection('releases', albums);
   }
 
   function uniqueTags(){
