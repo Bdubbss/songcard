@@ -202,8 +202,7 @@
     <option value="">Browse…</option>
     <option value="people">People</option>
     <option value="artists">Artists</option>
-    <option value="publishers">Publishers</option>
-    <option value="labels">Labels</option>
+    <option value="companies">Companies</option>
     <option value="tags">Tags</option>
     <option value="albums">Albums</option>
     <option value="stats">Stats</option>
@@ -260,23 +259,23 @@
   const ALBUM_STORAGE_KEY = 'song_albums_v1';
   const ARTIST_STORAGE_KEY = 'song_artists_v1';
   const PERSON_STORAGE_KEY = 'song_writers_v1'; // unchanged key: this is where Writers used to live, now holds unified People
-  const PUBLISHER_STORAGE_KEY = 'song_publishers_v1';
-  const LABEL_STORAGE_KEY = 'song_labels_v1';
+  const COMPANY_STORAGE_KEY = 'song_publishers_v1'; // unchanged key: this is where Publishers used to live, now holds unified Companies
+  const LEGACY_LABEL_STORAGE_KEY = 'song_labels_v1'; // read once to migrate, never written to again
   const LEGACY_CONTACT_STORAGE_KEY = 'song_contacts_v1'; // read once to migrate, never written to again
-  const SCHEMA_VERSION = 2;
+  const SCHEMA_VERSION = 3;
 
   let entries = [];
   let albums = [];
   let artists = [];
   let people = [];
-  let publishers = [];
-  let labels = [];
+  let companies = [];
+  let legacyLabels = [];
   let legacyContacts = [];
   let loaded = false;
   let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
   let albumFilterId = null;
-  let entityIndexType = null;   // 'person' | 'artist' | 'publisher' | 'label'
+  let entityIndexType = null;   // 'person' | 'artist' | 'company'
   let entityFilterType = null;
   let entityFilterId = null;
   let revisitOnly = false;
@@ -287,10 +286,9 @@
   let expandedEntityIds = new Set();
 
   const ENTITY_META = {
-    person:    { label: 'Person' },
-    artist:    { label: 'Artist' },
-    publisher: { label: 'Publisher' },
-    label:     { label: 'Label' }
+    person:  { label: 'Person' },
+    artist:  { label: 'Artist' },
+    company: { label: 'Company' }
   };
 
   const mainEl = document.getElementById('main');
@@ -346,14 +344,12 @@
   function entityArray(type){
     if(type==='artist') return artists;
     if(type==='person') return people;
-    if(type==='publisher') return publishers;
-    return labels;
+    return companies;
   }
   function entityStorageKey(type){
     if(type==='artist') return ARTIST_STORAGE_KEY;
     if(type==='person') return PERSON_STORAGE_KEY;
-    if(type==='publisher') return PUBLISHER_STORAGE_KEY;
-    return LABEL_STORAGE_KEY;
+    return COMPANY_STORAGE_KEY;
   }
   function findEntityById(type, id){
     if(!id) return null;
@@ -377,9 +373,8 @@
 
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
   function directChildIds(type, parentId){
-    if(type==='label') return labels.filter(function(l){ return l.parentLabelId===parentId; }).map(function(l){ return l.id; });
-    if(type==='publisher') return publishers.filter(function(p){ return p.administeredBy===parentId; }).map(function(p){ return p.id; });
-    return [];
+    if(type!=='company') return [];
+    return companies.filter(function(c){ return c.parentCompanyId===parentId; }).map(function(c){ return c.id; });
   }
   function allDescendantIds(type, rootId){
     const result = [];
@@ -394,7 +389,7 @@
     return result;
   }
   function entityRollupIds(type, rootId){
-    if(type==='label' || type==='publisher') return [rootId].concat(allDescendantIds(type, rootId));
+    if(type==='company') return [rootId].concat(allDescendantIds(type, rootId));
     return [rootId];
   }
   async function saveEntityArray(type){
@@ -405,9 +400,13 @@
   }
   function entryEntityIds(type, e){
     if(type==='artist') return e.artistId ? [e.artistId] : [];
-    if(type==='label') return e.labelId ? [e.labelId] : [];
     if(type==='person') return (e.writerCredits||[]).map(function(c){return c.writerId;}).filter(Boolean);
-    if(type==='publisher') return (e.writerCredits||[]).map(function(c){return c.publisherId;}).filter(Boolean);
+    if(type==='company'){
+      const ids = [];
+      if(e.labelId) ids.push(e.labelId);
+      (e.writerCredits||[]).forEach(function(c){ if(c.publisherId) ids.push(c.publisherId); });
+      return ids;
+    }
     return [];
   }
   function entityUsageMap(type){
@@ -438,7 +437,7 @@
     if(!e.artistId) e.artistId = '';
     // migrate old publisher string (used as label originally) -> labelId
     if(!e.labelId && e.publisher){
-      const l = findOrCreateEntity('label', e.publisher);
+      const l = findOrCreateEntity('company', e.publisher);
       if(l) e.labelId = l.id;
     }
     if(!e.labelId) e.labelId = '';
@@ -457,7 +456,7 @@
   function songsForAlbum(id){ return entries.filter(function(e){ return e.albumId === id; }); }
 
   function artistName(e){ const a = findEntityById('artist', e.artistId); return a ? a.name : (e.artist||''); }
-  function labelName(e){ const l = findEntityById('label', e.labelId); return l ? l.name : ''; }
+  function labelName(e){ const l = findEntityById('company', e.labelId); return l ? l.name : ''; }
 
   // ===== MusicBrainz + Spotify lookup =====
   async function mbSearchRecording(title, artist){
@@ -622,15 +621,52 @@
     try{ const r = await storageGet(ALBUM_STORAGE_KEY); albums = r && r.value ? JSON.parse(r.value) : []; }catch(e){ albums = []; }
     try{ const r = await storageGet(ARTIST_STORAGE_KEY); artists = r && r.value ? JSON.parse(r.value) : []; }catch(e){ artists = []; }
     try{ const r = await storageGet(PERSON_STORAGE_KEY); people = r && r.value ? JSON.parse(r.value) : []; }catch(e){ people = []; }
-    try{ const r = await storageGet(PUBLISHER_STORAGE_KEY); publishers = r && r.value ? JSON.parse(r.value) : []; }catch(e){ publishers = []; }
-    try{ const r = await storageGet(LABEL_STORAGE_KEY); labels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ labels = []; }
+    try{ const r = await storageGet(COMPANY_STORAGE_KEY); companies = r && r.value ? JSON.parse(r.value) : []; }catch(e){ companies = []; }
+    try{ const r = await storageGet(LEGACY_LABEL_STORAGE_KEY); legacyLabels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyLabels = []; }
     try{ const r = await storageGet(LEGACY_CONTACT_STORAGE_KEY); legacyContacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyContacts = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
+    const companiesChanged = migrateLabelsIntoCompanies();
     loaded = true;
     render();
     if(peopleChanged){ saveEntityArray('artist'); saveEntityArray('person'); }
-    if(entries.length){ saveEntries(); saveEntityArray('artist'); saveEntityArray('label'); }
+    if(companiesChanged){ saveEntityArray('company'); }
+    if(entries.length){ saveEntries(); saveEntityArray('artist'); }
+  }
+
+  // ===== One-time migration: legacy Publisher records get companyTypes/parentCompanyId; legacy Label records also become Company records (never auto-merged with an existing same-named Company) =====
+  function migrateLabelsIntoCompanies(){
+    let changed = false;
+    companies.forEach(function(c){
+      if(!c.companyTypes){ c.companyTypes = ['publisher']; changed = true; }
+      if(c.parentCompanyId === undefined){ c.parentCompanyId = c.administeredBy || ''; changed = true; }
+    });
+    legacyLabels.forEach(function(l){
+      const alreadyMigrated = companies.some(function(c){ return c.migratedFromLabelId === l.id; });
+      if(alreadyMigrated) return;
+      const nameMatch = companies.find(function(c){
+        return !c.migratedFromLabelId && (c.name||'').trim().toLowerCase() === (l.name||'').trim().toLowerCase();
+      });
+      const newCompany = {
+        id: l.id, // reuse the label's own id so song.labelId references keep working with zero remapping
+        name: l.name,
+        notes: l.notes || '',
+        photoUrl: l.photoUrl || '',
+        ipi: '', pro: '',
+        isMajor: !!l.isMajor,
+        companyTypes: ['label'],
+        parentCompanyId: l.parentLabelId || '',
+        administeredTerritory: '',
+        migratedFromLabelId: l.id
+      };
+      if(nameMatch){
+        newCompany.possibleDuplicateOf = nameMatch.id;
+        nameMatch.possibleDuplicateOf = newCompany.id;
+      }
+      companies.push(newCompany);
+      changed = true;
+    });
+    return changed;
   }
 
   // ===== One-time migration: legacy Contact records become Person records too (never auto-merged with an existing same-named Person) =====
@@ -728,8 +764,7 @@
     const activeEntityType = view==='entityIndex' ? entityIndexType : (view==='entityFilter' ? entityFilterType : null);
     if(activeEntityType==='person') browseVal = 'people';
     else if(activeEntityType==='artist') browseVal = 'artists';
-    else if(activeEntityType==='publisher') browseVal = 'publishers';
-    else if(activeEntityType==='label') browseVal = 'labels';
+    else if(activeEntityType==='company') browseVal = 'companies';
     else if(view==='tags' || view==='tagFilter'){ browseVal = 'tags'; }
     else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
     else if(view==='stats'){ browseVal = 'stats'; }
@@ -811,17 +846,17 @@
   function renderEntityTreeRows(type, parentId, depth){
     const map = entityUsageMap(type);
     const children = entityArray(type).filter(function(x){
-      const p = type==='label' ? (x.parentLabelId||'') : (x.administeredBy||'');
-      return p === (parentId||'');
+      return (x.parentCompanyId||'') === (parentId||'');
     }).sort(function(a,b){ return a.name.localeCompare(b.name); });
     return children.map(function(ent){
       const kids = directChildIds(type, ent.id);
       const songs = map.get(ent.id) || [];
       const expanded = expandedEntityIds.has(ent.id);
+      const typeTags = (ent.companyTypes||[]).map(function(t){ return t.toUpperCase(); }).join('/');
       let row = '<div class="writer-row" data-entity-row="' + esc(ent.id) + '" style="padding-left:' + (4 + depth*22) + 'px;">' +
         (kids.length ? '<button class="tree-toggle" data-toggle-id="'+esc(ent.id)+'" type="button">'+(expanded?'\u25be':'\u25b8')+'</button>' : '<span class="tree-toggle-spacer"></span>') +
-        '<div class="writer-name">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:8px; vertical-align:middle;">MAJOR</span>' : '') + '</div>' +
-        '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + (kids.length ? ' \u00b7 ' + kids.length + ' sub-' + (type==='label'?'label':'publisher') + (kids.length===1?'':'s') : '') + '</div>' +
+        '<div class="writer-name">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:8px; vertical-align:middle;">MAJOR</span>' : '') + (typeTags ? ' <span class="admin-through">'+typeTags+'</span>' : '') + '</div>' +
+        '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + (kids.length ? ' \u00b7 ' + kids.length + ' sub-compan' + (kids.length===1?'y':'ies') : '') + '</div>' +
       '</div>';
       if(expanded && kids.length){ row += renderEntityTreeRows(type, ent.id, depth+1); }
       return row;
@@ -838,7 +873,7 @@
       document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
       return;
     }
-    if(type==='label' || type==='publisher'){
+    if(type==='company'){
       html += '<div class="writer-index">' + renderEntityTreeRows(type, '', 0) + '</div>';
       mainEl.innerHTML = html;
       document.getElementById('newEntityBtn').addEventListener('click', function(){ openEntityModal(type, null); });
@@ -895,35 +930,34 @@
     list = applySort(applyFilters(list));
     let html = '<button class="back-link" id="backToEntity">\u2190 All ' + meta.label.toLowerCase() + 's</button>';
     const directChildren = directChildIds(type, id).map(function(cid){ return findEntityById(type, cid); }).filter(Boolean);
-    const hasParent = (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId)) ||
-                       (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy));
-    const dup = ent.possibleDuplicateOf ? findEntityById('person', ent.possibleDuplicateOf) : null;
+    const dup = ent.possibleDuplicateOf ? findEntityById(type, ent.possibleDuplicateOf) : null;
+    const companyTypeTags = type==='company' ? (ent.companyTypes||[]).map(function(t){ return t.toUpperCase(); }).join(' / ') : '';
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="entity-header">' +
       (ent.photoUrl ? '<img class="entity-photo" src="'+esc(ent.photoUrl)+'" alt="" onerror="this.style.display=\'none\';">' : '<div class="entity-photo-placeholder">no photo</div>') +
       '<div style="flex:1; min-width:0;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:9px; vertical-align:middle;">MAJOR</span>' : '') + '</div>' +
+      (companyTypeTags ? '<div class="publisher">' + esc(companyTypeTags) + '</div>' : '') +
       (type==='person' && (ent.contactRole || ent.company) ? '<div class="artist" style="margin-top:2px;">' + esc(ent.contactRole||'') + (ent.company ? (ent.contactRole?' \u00b7 ':'') + (findCompanyMatch(ent.company) ? '<button data-entity-type="'+findCompanyMatch(ent.company).type+'" data-entity-id="'+esc(findCompanyMatch(ent.company).ent.id)+'" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;text-transform:inherit;letter-spacing:inherit;">'+esc(ent.company)+'</button>' : esc(ent.company)) : '') + '</div>' : '') +
       (type==='person' && ent.email ? '<div class="publisher">Email: ' + esc(ent.email) + '</div>' : '') +
       (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + (ent.pro ? ' \u00b7 ' + esc(ent.pro) : '') + '</div>' : (ent.pro ? '<div class="publisher">PRO: ' + esc(ent.pro) + '</div>' : '')) +
-      (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId) ? '<div class="publisher">Imprint of <button data-entity-type="label" data-entity-id="'+esc(ent.parentLabelId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('label', ent.parentLabelId).name)+'</button></div>' : '') +
-      (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy) ? '<div class="publisher">Administered / sub-published by <button data-entity-type="publisher" data-entity-id="'+esc(ent.administeredBy)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('publisher', ent.administeredBy).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
-      (directChildren.length ? '<div class="writers-label" style="margin-top:8px;">' + (type==='label' ? 'Imprints / sub-labels' : 'Sub-publishers') + '</div><div class="chip-row">' + directChildren.map(function(c){ return '<button class="chip" data-entity-type="'+type+'" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+'</button>'; }).join('') + '</div>' : '') +
-      ((type==='label'||type==='publisher') && personsAtCompany(ent.name).length ? '<div class="writers-label" style="margin-top:8px;">People here</div><div class="chip-row">' + personsAtCompany(ent.name).map(function(c){ return '<button class="chip chip-tag" data-entity-type="person" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+(c.contactRole?' \u2014 '+esc(c.contactRole):'')+'</button>'; }).join('') + '</div>' : '') +
+      (type==='company' && ent.parentCompanyId && findEntityById('company', ent.parentCompanyId) ? '<div class="publisher">Under <button data-entity-type="company" data-entity-id="'+esc(ent.parentCompanyId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('company', ent.parentCompanyId).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
+      (directChildren.length ? '<div class="writers-label" style="margin-top:8px;">Sub-companies</div><div class="chip-row">' + directChildren.map(function(c){ return '<button class="chip" data-entity-type="'+type+'" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+'</button>'; }).join('') + '</div>' : '') +
+      (type==='company' && personsAtCompany(ent.name).length ? '<div class="writers-label" style="margin-top:8px;">People here</div><div class="chip-row">' + personsAtCompany(ent.name).map(function(c){ return '<button class="chip chip-tag" data-entity-type="person" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+(c.contactRole?' \u2014 '+esc(c.contactRole):'')+'</button>'; }).join('') + '</div>' : '') +
       (type==='artist' && ent.managerPersonId && findEntityById('person', ent.managerPersonId) ? '<div class="publisher">Manager: <button data-entity-type="person" data-entity-id="'+esc(ent.managerPersonId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('person', ent.managerPersonId).name)+'</button></div>' : '') +
-      (dup ? '<div class="publisher" style="color:var(--stamp);">\u26a0 Possible duplicate of <button data-entity-type="person" data-entity-id="'+esc(dup.id)+'" style="background:none;border:none;color:var(--stamp);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(dup.name)+'</button> \u2014 these were separate Writer/Contact records before merging. Review and edit manually if they\u2019re the same person.</div>' : '') +
+      (dup ? '<div class="publisher" style="color:var(--stamp);">\u26a0 Possible duplicate of <button data-entity-type="'+type+'" data-entity-id="'+esc(dup.id)+'" style="background:none;border:none;color:var(--stamp);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(dup.name)+'</button> \u2014 these were separate records before merging. Review and edit manually if they\u2019re the same.</div>' : '') +
       (ent.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(ent.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
         '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a>' +
         '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>' +
-        (type==='person' || type==='publisher' ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + mlcUrl() + '">MLC Search \u2197</a>' : '') +
+        (type==='person' || (type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1) ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + mlcUrl() + '">MLC Search \u2197</a>' : '') +
         '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
       '</div>' +
       '</div>' + // close flex:1 name/details wrapper
       '</div>' + // close entity-header
     '</div>';
-    if(type==='publisher'){
+    if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
       const seen = new Set();
       const writerAdminEntries = [];
       list.forEach(function(e){
@@ -939,15 +973,15 @@
           '<div class="writers-label">Songwriters under ' + esc(ent.name) + '</div>' +
           '<div class="chip-row" style="margin-top:6px;">' + writerAdminEntries.map(function(c){
             const w = findEntityById('person', c.writerId);
-            const p = findEntityById('publisher', c.publisherId);
+            const p = findEntityById('company', c.publisherId);
             if(!w) return '';
-            return '<button class="chip" data-entity-type="writer" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+(p && p.id!==id ? ' <span class="admin-through">\u2014 admin through '+esc(p.name)+'</span>' : '')+'</button>';
+            return '<button class="chip" data-entity-type="person" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+(p && p.id!==id ? ' <span class="admin-through">\u2014 admin through '+esc(p.name)+'</span>' : '')+'</button>';
           }).join('') + '</div>' +
         '</div>';
       }
     }
     if(directChildren.length){
-      html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-' + (type==='label'?'label':'publisher') + (directChildren.length===1?'':'s') + '</div>';
+      html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-compan' + (directChildren.length===1?'y':'ies') + '</div>';
     }
     if(!directChildren.length){
       html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
@@ -963,9 +997,11 @@
       if(idx>-1) arr.splice(idx,1);
       entries.forEach(function(e){
         if(type==='artist' && e.artistId===id) e.artistId='';
-        if(type==='label' && e.labelId===id) e.labelId='';
+        if(type==='company'){
+          if(e.labelId===id) e.labelId='';
+          (e.writerCredits||[]).forEach(function(c){ if(c.publisherId===id) c.publisherId=''; });
+        }
         if(type==='person') e.writerCredits = (e.writerCredits||[]).filter(function(c){ return c.writerId!==id; });
-        if(type==='publisher') (e.writerCredits||[]).forEach(function(c){ if(c.publisherId===id) c.publisherId=''; });
       });
       if(type==='person'){
         artists.forEach(function(a){ if(a.managerPersonId===id) a.managerPersonId=''; });
@@ -992,34 +1028,35 @@
     const ent = id ? findEntityById(type, id) : null;
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    const showIpi = (type==='person' || type==='publisher');
-    const showAdmin = (type==='publisher');
-    const showParentLabel = (type==='label');
+    const showIpi = (type==='person' || type==='company');
+    const showCompanyTypes = (type==='company');
+    const showParentCompany = (type==='company');
     const showManager = (type==='artist');
     const showContactInfo = (type==='person');
     let extraFields = '';
+    if(showCompanyTypes){
+      extraFields += '<div class="field"><label>Company type</label><div style="display:flex; gap:16px; flex-wrap:wrap;">' +
+        ['label','publisher'].map(function(t){
+          const checked = ent && (ent.companyTypes||[]).indexOf(t)!==-1;
+          return '<label style="display:flex; align-items:center; gap:6px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" class="ent-company-type" value="'+t+'" style="width:auto;"'+(checked?' checked':'')+'> '+(t==='label'?'Label':'Publisher')+'</label>';
+        }).join('') +
+      '</div><div class="hint">Check both if this company is both a label and a publisher.</div></div>';
+    }
     if(showIpi){
       extraFields += '<div class="field-row">' +
         '<div class="field"><label>IPI number (optional)</label><input id="ent-ipi" type="text" value="' + (ent?esc(ent.ipi||''):'') + '" placeholder="e.g. 00123456789"></div>' +
         '<div class="field"><label>PRO (optional)</label><select id="ent-pro"><option value=""'+(!ent||!ent.pro?' selected':'')+'>\u2014 Unknown \u2014</option>' +
           ['ASCAP','BMI','SESAC','GMR','Other'].map(function(p){ return '<option value="'+p+'"'+(ent&&ent.pro===p?' selected':'')+'>'+p+'</option>'; }).join('') +
         '</select></div>' +
-      '</div><div class="hint" style="margin-top:-8px; margin-bottom:14px;">Look either up on the MLC\u2019s or your PRO\u2019s free public search if you don\u2019t have it handy.</div>';
+      '</div><div class="hint" style="margin-top:-8px; margin-bottom:14px;">' + (type==='company' ? 'Only relevant if this company is a publisher. ' : '') + 'Look either up on the MLC\u2019s or a PRO\u2019s free public search if you don\u2019t have it handy.</div>';
     }
-    if(showParentLabel){
+    if(showParentCompany){
       extraFields += '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="ent-ismajor" style="width:auto;"'+(ent&&ent.isMajor?' checked':'')+'> This is a major (e.g. Warner, Sony, Universal)</label></div>';
-      const majorLabels = labels.filter(function(l){ return l.isMajor && (!ent || l.id!==ent.id); }).sort(function(a,b){ return a.name.localeCompare(b.name); });
-      extraFields += '<div class="field"><label>Parent label / major (optional)</label><select id="ent-parent-label"><option value="">\u2014 None \u2014</option>' +
-          majorLabels.map(function(l){ return '<option value="'+esc(l.id)+'"'+(ent && ent.parentLabelId===l.id?' selected':'')+'>'+esc(l.name)+'</option>'; }).join('') +
-        '</select><div class="hint">' + (majorLabels.length ? 'Only labels tagged as a major show up here.' : 'No labels are tagged as a major yet \u2014 tag one first, then it\u2019ll appear here to pick from.') + '</div></div>';
-    }
-    if(showAdmin){
-      extraFields += '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="ent-ismajor" style="width:auto;"'+(ent&&ent.isMajor?' checked':'')+'> This is a major (e.g. Warner Chappell, Sony, Universal)</label></div>';
-      const majorPubs = publishers.filter(function(p){ return p.isMajor && (!ent || p.id!==ent.id); }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+      const majorCompanies = companies.filter(function(c){ return c.isMajor && (!ent || c.id!==ent.id); }).sort(function(a,b){ return a.name.localeCompare(b.name); });
       extraFields += '<div class="field-row">' +
-        '<div class="field"><label>Administered / sub-published by (optional)</label><select id="ent-admin"><option value="">\u2014 None \u2014</option>' +
-          majorPubs.map(function(p){ return '<option value="'+esc(p.id)+'"'+(ent && ent.administeredBy===p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('') +
-        '</select><div class="hint">' + (majorPubs.length ? 'Only publishers tagged as a major show up here.' : 'No publishers are tagged as a major yet.') + '</div></div>' +
+        '<div class="field"><label>Parent company / administered by (optional)</label><select id="ent-parent-company"><option value="">\u2014 None \u2014</option>' +
+          majorCompanies.map(function(c){ return '<option value="'+esc(c.id)+'"'+(ent && ent.parentCompanyId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'; }).join('') +
+        '</select><div class="hint">' + (majorCompanies.length ? 'Only companies tagged as a major show up here.' : 'No companies are tagged as a major yet \u2014 tag one first, then it\u2019ll appear here to pick from.') + '</div></div>' +
         '<div class="field"><label>Territory (optional)</label><input id="ent-territory" type="text" value="'+(ent?esc(ent.administeredTerritory||''):'')+'" placeholder="e.g. UK &amp; Europe"></div>' +
       '</div>';
     }
@@ -1028,7 +1065,7 @@
         '<div class="field"><label>Industry role (optional)</label><input id="ent-role" type="text" value="' + (ent?esc(ent.contactRole||''):'') + '" placeholder="e.g. A&amp;R, Manager, Agent"></div>' +
         '<div class="field"><label>Company (optional)</label><input id="ent-company" type="text" list="companyNamesList" value="' + (ent?esc(ent.company||''):'') + '" placeholder="e.g. Mezz Entertainment"></div>' +
       '</div>' +
-      '<datalist id="companyNamesList">' + labels.concat(publishers).map(function(x){ return '<option value="'+esc(x.name)+'">'; }).join('') + '</datalist>' +
+      '<datalist id="companyNamesList">' + companies.map(function(x){ return '<option value="'+esc(x.name)+'">'; }).join('') + '</datalist>' +
       '<div class="field"><label>Email (optional)</label><input id="ent-email" type="text" value="' + (ent?esc(ent.email||''):'') + '" placeholder="name@company.com"></div>';
     }
     if(showManager){
@@ -1076,23 +1113,17 @@
         extra.company = overlay.querySelector('#ent-company').value.trim();
         extra.email = overlay.querySelector('#ent-email').value.trim();
       }
-      if(showParentLabel){
-        extra.isMajor = overlay.querySelector('#ent-ismajor').checked;
-        const chosenParent = overlay.querySelector('#ent-parent-label').value;
-        if(chosenParent && ent && (chosenParent===ent.id || allDescendantIds('label', ent.id).indexOf(chosenParent)!==-1)){
-          toast('Can\u2019t set that \u2014 it would create a loop (that label is under this one already)');
-          return;
-        }
-        extra.parentLabelId = chosenParent;
+      if(showCompanyTypes){
+        extra.companyTypes = Array.from(overlay.querySelectorAll('.ent-company-type:checked')).map(function(cb){ return cb.value; });
       }
-      if(showAdmin){
+      if(showParentCompany){
         extra.isMajor = overlay.querySelector('#ent-ismajor').checked;
-        const chosenAdmin = overlay.querySelector('#ent-admin').value;
-        if(chosenAdmin && ent && (chosenAdmin===ent.id || allDescendantIds('publisher', ent.id).indexOf(chosenAdmin)!==-1)){
-          toast('Can\u2019t set that \u2014 it would create a loop (that publisher is under this one already)');
+        const chosenParent = overlay.querySelector('#ent-parent-company').value;
+        if(chosenParent && ent && (chosenParent===ent.id || allDescendantIds('company', ent.id).indexOf(chosenParent)!==-1)){
+          toast('Can\u2019t set that \u2014 it would create a loop (that company is under this one already)');
           return;
         }
-        extra.administeredBy = chosenAdmin;
+        extra.parentCompanyId = chosenParent;
         extra.administeredTerritory = overlay.querySelector('#ent-territory').value.trim();
       }
       let peopleChangedNow = false;
@@ -1120,11 +1151,8 @@
 
   function findCompanyMatch(name){
     if(!name) return null;
-    const lbl = findEntityByName('label', name);
-    if(lbl) return { type: 'label', ent: lbl };
-    const pub = findEntityByName('publisher', name);
-    if(pub) return { type: 'publisher', ent: pub };
-    return null;
+    const c = findEntityByName('company', name);
+    return c ? { type: 'company', ent: c } : null;
   }
   function personsAtCompany(name){
     return people.filter(function(p){ return (p.company||'').trim().toLowerCase() === (name||'').trim().toLowerCase(); });
@@ -1244,7 +1272,7 @@
   }
 
   function renderStats(){
-    const wMap = entityUsageMap('person'), aMap = entityUsageMap('artist'), pMap = entityUsageMap('publisher'), lMap = entityUsageMap('label');
+    const wMap = entityUsageMap('person'), aMap = entityUsageMap('artist'), cMap = entityUsageMap('company');
     const revisitCount = entries.filter(function(e){ return e.revisit; }).length;
     const priorityCount = entries.filter(function(e){ return e.priority; }).length;
     const avgRating = entries.length ? (entries.reduce(function(s,e){ return s+(e.rating||0); },0) / entries.length).toFixed(1) : '0.0';
@@ -1253,8 +1281,7 @@
       '<div class="stat-tile"><div class="stat-num">' + entries.length + '</div><div class="stat-label">Songs</div></div>' +
       '<div class="stat-tile"><div class="stat-num">' + wMap.size + '</div><div class="stat-label">Writers</div></div>' +
       '<div class="stat-tile"><div class="stat-num">' + aMap.size + '</div><div class="stat-label">Artists</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + pMap.size + '</div><div class="stat-label">Publishers</div></div>' +
-      '<div class="stat-tile"><div class="stat-num">' + lMap.size + '</div><div class="stat-label">Labels</div></div>' +
+      '<div class="stat-tile"><div class="stat-num">' + cMap.size + '</div><div class="stat-label">Companies</div></div>' +
       '<div class="stat-tile"><div class="stat-num">' + albums.length + '</div><div class="stat-label">Albums</div></div>' +
       '<div class="stat-tile"><div class="stat-num">' + avgRating + '</div><div class="stat-label">Avg rating</div></div>' +
       '<div class="stat-tile"><div class="stat-num">' + priorityCount + '</div><div class="stat-label">Priority</div></div>' +
@@ -1328,7 +1355,7 @@
     const headers = ['Song','Artist','Album','Label','ISRC','Credits','Tags','Rating','Priority','Revisit','Thoughts','Streams/Status','Spotify Link','YouTube Link','Date Added'];
     const rows = entries.slice().sort(function(a,b){ return b.createdAt-a.createdAt; }).map(function(e){
       const alb = findAlbum(e.albumId);
-      const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('person',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + ' ['+(c.role||'Songwriter')+']' + (p ? ' ('+p.name+')' : ''); }).filter(Boolean).join('; ');
+      const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('person',c.writerId); const p=findEntityById('company',c.publisherId); if(!w) return ''; return w.name + ' ['+(c.role||'Songwriter')+']' + (p ? ' ('+p.name+')' : ''); }).filter(Boolean).join('; ');
       return [
         e.song, artistName(e), alb?alb.title:'', labelName(e), e.isrc, credits, (e.tags||[]).join('; '),
         e.rating||0, e.priority?'Yes':'No', e.revisit?'Yes':'No', e.thoughts, e.streamNote,
@@ -1377,7 +1404,7 @@
       const writerName = m ? m[1].trim() : piece;
       const pubName = m ? m[2].trim() : '';
       const w = findOrCreateEntity('person', writerName);
-      const p = pubName ? findOrCreateEntity('publisher', pubName) : null;
+      const p = pubName ? findOrCreateEntity('company', pubName) : null;
       return w ? { writerId: w.id, publisherId: p ? p.id : '', role: role || 'Songwriter' } : null;
     }).filter(Boolean);
   }
@@ -1390,8 +1417,7 @@
       albums: albums,
       artists: artists,
       people: people,
-      publishers: publishers,
-      labels: labels
+      companies: companies
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -1416,27 +1442,31 @@
       toast('That doesn\u2019t look like a valid SongCard backup');
       return;
     }
-    // backups from before the Person merge stored separate writers[] and contacts[] arrays
-    const isOldFormat = !data.people && (data.writers || data.contacts);
-    const restoredPeople = isOldFormat ? (data.writers || []) : (data.people || []);
-    const restoredLegacyContacts = isOldFormat ? (data.contacts || []) : [];
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Publishers: ' + (data.publishers||[]).length + ', Labels: ' + (data.labels||[]).length + ', Albums: ' + (data.albums||[]).length;
+    // handle backups from any earlier schema generation:
+    //  v1: separate writers[] + contacts[] + publishers[] + labels[]
+    //  v2: people[] (merged) + publishers[] + labels[] (not yet merged into companies)
+    //  v3 (current): people[] + companies[]
+    const restoredPeople = data.people || data.writers || [];
+    const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
+    const restoredCompanies = data.companies || data.publishers || [];
+    const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
     artists = data.artists || [];
     people = restoredPeople;
-    publishers = data.publishers || [];
-    labels = data.labels || [];
+    companies = restoredCompanies;
     legacyContacts = restoredLegacyContacts;
+    legacyLabels = restoredLegacyLabels;
     entries.forEach(normalize);
     migrateContactsIntoPeople();
+    migrateLabelsIntoCompanies();
     await saveEntries();
     await saveAlbums();
     await saveEntityArray('artist');
     await saveEntityArray('person');
-    await saveEntityArray('publisher');
-    await saveEntityArray('label');
+    await saveEntityArray('company');
     toast('Backup restored');
     view = 'songs'; render();
   }
@@ -1472,7 +1502,7 @@
       if(artistTxt){ const a = findOrCreateEntity('artist', artistTxt); if(a) artistId = a.id; }
       let labelId = '';
       const labelTxt = (iLabel>-1 ? row[iLabel] : (iPub>-1 ? row[iPub] : '')).trim();
-      if(labelTxt){ const l = findOrCreateEntity('label', labelTxt); if(l) labelId = l.id; }
+      if(labelTxt){ const l = findOrCreateEntity('company', labelTxt); if(l) labelId = l.id; }
 
       let writerCredits = [];
       if(iCredits>-1 && row[iCredits]){ writerCredits = parseCreditsField(row[iCredits]); }
@@ -1497,7 +1527,7 @@
       });
       added++;
     }
-    await saveEntityArray('artist'); await saveEntityArray('label'); await saveEntityArray('person'); await saveEntityArray('publisher');
+    await saveEntityArray('artist'); await saveEntityArray('person'); await saveEntityArray('company');
     await saveAlbums(); await saveEntries();
     toast('Imported ' + added + ' song' + (added===1?'':'s') + (skipped ? ', skipped ' + skipped + ' duplicate' + (skipped===1?'':'s') : ''));
     render();
@@ -1540,7 +1570,7 @@
           '<div class="field"><label>Artist</label><input id="f-artist" type="text" list="artistNamesList" value="' + (e?esc(artistName(e)):'') + '" placeholder="Who released it"></div>' +
           '<div class="field"><label>Label</label><input id="f-label" type="text" list="labelNamesList" value="' + (e?esc(labelName(e)):'') + '" placeholder="Record label"></div>' +
         '</div>' +
-        buildDatalist('artistNamesList','artist') + buildDatalist('labelNamesList','label') + buildDatalist('writerNamesList','person') + buildDatalist('publisherNamesList','publisher') +
+        buildDatalist('artistNamesList','artist') + buildDatalist('labelNamesList','company') + buildDatalist('writerNamesList','person') + buildDatalist('publisherNamesList','company') +
         '<datalist id="creditRoleList">' + knownRoles().map(function(r){ return '<option value="'+esc(r)+'">'; }).join('') + '</datalist>' +
         '<div class="lookup-box">' +
           '<div class="lookup-title">Auto-fill from MusicBrainz (optional)</div>' +
@@ -1654,7 +1684,7 @@
 
       const tags = tagsRaw ? tagsRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
       const artistId = artistTxt ? (findOrCreateEntity('artist', artistTxt) || {}).id || '' : '';
-      const labelId = labelTxt ? (findOrCreateEntity('label', labelTxt) || {}).id || '' : '';
+      const labelId = labelTxt ? (findOrCreateEntity('company', labelTxt) || {}).id || '' : '';
 
       const writerCredits = [];
       overlay.querySelectorAll('.credit-row').forEach(function(row){
@@ -1663,7 +1693,7 @@
         const pName = row.querySelector('.credit-publisher').value.trim();
         if(!wName) return;
         const w = findOrCreateEntity('person', wName);
-        const p = (pName && roleName.toLowerCase()==='songwriter') ? findOrCreateEntity('publisher', pName) : null;
+        const p = (pName && roleName.toLowerCase()==='songwriter') ? findOrCreateEntity('company', pName) : null;
         if(w) writerCredits.push({ writerId: w.id, publisherId: p ? p.id : '', role: roleName });
       });
 
@@ -1689,7 +1719,7 @@
       }
       overlay.remove();
       if(albumsChanged){ await saveAlbums(); }
-      await saveEntityArray('artist'); await saveEntityArray('label'); await saveEntityArray('person'); await saveEntityArray('publisher');
+      await saveEntityArray('artist'); await saveEntityArray('person'); await saveEntityArray('company');
       await saveEntries();
       toast(e ? 'Card updated' : 'Card added');
       render();
@@ -1704,8 +1734,7 @@
     const v = browseSelect.value;
     if(v==='people'){ view='entityIndex'; entityIndexType='person'; }
     else if(v==='artists'){ view='entityIndex'; entityIndexType='artist'; }
-    else if(v==='publishers'){ view='entityIndex'; entityIndexType='publisher'; }
-    else if(v==='labels'){ view='entityIndex'; entityIndexType='label'; }
+    else if(v==='companies'){ view='entityIndex'; entityIndexType='company'; }
     else if(v==='tags'){ view='tags'; }
     else if(v==='albums'){ view='albums'; }
     else if(v==='stats'){ view='stats'; }
