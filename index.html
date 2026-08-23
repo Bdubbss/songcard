@@ -205,6 +205,7 @@
     <option value="companies">Companies</option>
     <option value="tags">Tags</option>
     <option value="albums">Releases</option>
+    <option value="notes">Notes</option>
     <option value="stats">Stats</option>
   </select>
   <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
@@ -281,6 +282,7 @@
   let legacyLabels = [];
   let legacyContacts = [];
   let affiliations = [];
+  let notes = [];
   let loaded = false;
   let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
@@ -499,6 +501,38 @@
   function affiliationDateRange(a){
     if(!a.startDate && !a.endDate) return 'Current';
     return (a.startDate || '?') + '\u2013' + (a.endDate || 'present');
+  }
+
+  // ===== Notes: dated observations that can link to more than one thing at once =====
+  const NOTE_TYPES = ['Quick thought','A&R note','Research','Meeting note','Question','Idea','Career note','Recommendation','Listening note','Follow-up note','Other'];
+  async function saveNotes(){
+    await syncNormalizedCollection('notes', notes);
+  }
+  function findNote(id){ return notes.find(function(n){ return n.id===id; }) || null; }
+  function findRelatable(type, id){
+    return type==='release' ? findAlbum(id) : findEntityById(type, id);
+  }
+  function notesForEntity(type, id){
+    return notes.filter(function(n){ return (n.relatedEntities||[]).some(function(r){ return r.type===type && r.id===id; }); })
+      .sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0) || b.createdAt-a.createdAt; });
+  }
+  function notesSectionHtml(type, id){
+    const list = notesForEntity(type, id);
+    let html = '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Notes</div><button class="icon-btn" id="addNoteBtn" type="button">+ add</button></div>';
+    if(list.length){
+      html += '<div class="writer-index" style="margin-top:4px;">' + list.map(function(nt){
+        return '<div class="writer-row" data-edit-note="' + esc(nt.id) + '" style="cursor:pointer;">' +
+          '<div class="writer-name" style="font-size:15px;">' + (nt.title?esc(nt.title):esc(nt.type)) + (nt.pinned ? ' <span class="admin-through">PINNED</span>' : '') + '</div>' +
+          '<div class="writer-count">' + new Date(nt.createdAt).toLocaleDateString() + '</div>' +
+          '<div class="writer-songs">' + esc((nt.text||'').slice(0,120)) + ((nt.text||'').length>120?'\u2026':'') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div class="writers-label" style="font-style:italic; margin-top:6px;">No notes yet.</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
@@ -814,6 +848,7 @@
     try{ const r = await storageGet(LEGACY_LABEL_STORAGE_KEY); legacyLabels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyLabels = []; }
     try{ const r = await storageGet(LEGACY_CONTACT_STORAGE_KEY); legacyContacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyContacts = []; }
     try{ affiliations = await DataStore.getAll('affiliations'); }catch(e){ console.error('Could not load affiliations', e); affiliations = []; }
+    try{ notes = await DataStore.getAll('notes'); }catch(e){ console.error('Could not load notes', e); notes = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
     const companiesChanged = migrateLabelsIntoCompanies();
@@ -961,6 +996,7 @@
     else if(activeEntityType==='company') browseVal = 'companies';
     else if(view==='tags' || view==='tagFilter'){ browseVal = 'tags'; }
     else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
+    else if(view==='notes'){ browseVal = 'notes'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
     revisitToggle.classList.toggle('toggle-on', revisitOnly);
@@ -975,6 +1011,7 @@
     if(view === 'tagFilter'){ renderTagFilter(q); return; }
     if(view === 'albums'){ renderAlbums(); return; }
     if(view === 'albumFilter'){ renderAlbumFilter(q); return; }
+    if(view === 'notes'){ renderNotes(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -1185,6 +1222,7 @@
         '</div>';
       }
     }
+    html += notesSectionHtml(type, id);
     if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
       const seen = new Set();
       const writerAdminEntries = [];
@@ -1224,6 +1262,12 @@
     mainEl.querySelectorAll('[data-edit-affiliation]').forEach(function(row){
       row.addEventListener('click', function(){ openAffiliationModal(row.getAttribute('data-edit-affiliation')); });
     });
+    if(document.getElementById('addNoteBtn')){
+      document.getElementById('addNoteBtn').addEventListener('click', function(){ openNoteModal(null, { type: type, id: id }); });
+    }
+    mainEl.querySelectorAll('[data-edit-note]').forEach(function(row){
+      row.addEventListener('click', function(){ openNoteModal(row.getAttribute('data-edit-note')); });
+    });
     document.getElementById('deleteEntityBtn').addEventListener('click', async function(){
       if(!confirm('Delete "' + ent.name + '"? Songs stay, they just lose this credit.')) return;
       const arr = entityArray(type);
@@ -1246,6 +1290,13 @@
         affiliations = affiliations.filter(function(a){ return orphanedAffiliations.indexOf(a)===-1; });
         await saveAffiliations();
       }
+      let notesChanged = false;
+      notes.forEach(function(nt){
+        const before = (nt.relatedEntities||[]).length;
+        nt.relatedEntities = (nt.relatedEntities||[]).filter(function(r){ return !(r.type===type && r.id===id); });
+        if(nt.relatedEntities.length !== before) notesChanged = true;
+      });
+      if(notesChanged){ await saveNotes(); }
       await saveEntityArray(type);
       await saveEntries();
       toast(meta.label + ' deleted');
@@ -1479,15 +1530,29 @@
         }).join('') + '</div>' +
       '</div>';
     }
+    html += notesSectionHtml('release', album.id);
     html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + ' logged from this release</div>';
     html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Assign this release to a card to see it here.</div>';
     mainEl.innerHTML = html;
     document.getElementById('backToAlbums').addEventListener('click', function(){ view='albums'; render(); });
     document.getElementById('editAlbumBtn').addEventListener('click', function(){ openAlbumModal(album.id); });
+    if(document.getElementById('addNoteBtn')){
+      document.getElementById('addNoteBtn').addEventListener('click', function(){ openNoteModal(null, { type: 'release', id: album.id }); });
+    }
+    mainEl.querySelectorAll('[data-edit-note]').forEach(function(row){
+      row.addEventListener('click', function(){ openNoteModal(row.getAttribute('data-edit-note')); });
+    });
     document.getElementById('deleteAlbumBtn').addEventListener('click', async function(){
       if(!confirm('Delete "' + album.title + '"? Songs stay, they just lose the release link.')) return;
       albums = albums.filter(function(a){ return a.id !== album.id; });
       entries.forEach(function(e){ if(e.albumId === album.id) e.albumId = ''; });
+      let notesChanged = false;
+      notes.forEach(function(nt){
+        const before = (nt.relatedEntities||[]).length;
+        nt.relatedEntities = (nt.relatedEntities||[]).filter(function(r){ return !(r.type==='release' && r.id===album.id); });
+        if(nt.relatedEntities.length !== before) notesChanged = true;
+      });
+      if(notesChanged){ await saveNotes(); }
       await saveAlbums(); await saveEntries();
       toast('Release deleted'); view = 'albums'; render();
     });
@@ -1632,6 +1697,125 @@
       await saveAffiliations();
       toast(a ? 'Affiliation updated' : 'Affiliation added');
       render();
+    });
+  }
+
+  function openNoteModal(id, presetRelated){
+    const n = id ? findNote(id) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (n ? 'Edit note' : 'New note') + '</h2>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Title (optional)</label><input id="nt-title" type="text" value="' + (n?esc(n.title||''):'') + '" placeholder="Short label"></div>' +
+          '<div class="field"><label>Type</label><select id="nt-type">' + NOTE_TYPES.map(function(t){ return '<option value="'+t+'"'+((n?n.type:'Quick thought')===t?' selected':'')+'>'+t+'</option>'; }).join('') + '</select></div>' +
+        '</div>' +
+        '<div class="field"><label>Note</label><textarea id="nt-text" style="min-height:100px;" placeholder="What you observed, thought, or want to remember\u2026">' + (n?esc(n.text||''):'') + '</textarea></div>' +
+        '<div class="field"><label>Tags (optional)</label><input id="nt-tags" type="text" value="' + (n?esc((n.tags||[]).join(', ')):'') + '" placeholder="comma separated"></div>' +
+        '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="nt-pinned" style="width:auto;"' + (n&&n.pinned?' checked':'') + '> Pin to top</label></div>' +
+        '<div class="field"><label>Related to</label><div id="relatedChips" class="chip-row" style="margin-bottom:8px;"></div>' +
+          '<div class="lookup-row">' +
+            '<select id="nt-rel-type" style="max-width:120px;"><option value="person">Person</option><option value="artist">Artist</option><option value="company">Company</option><option value="release">Release</option></select>' +
+            '<select id="nt-rel-entity"></select>' +
+            '<button type="button" class="lookup-btn" id="addRelatedBtn">+ Add</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          (n ? '<button class="btn btn-danger" id="ntDeleteBtn" type="button">Delete</button>' : '') +
+          '<button class="btn btn-ghost" id="ntCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="ntSaveBtn" type="button">' + (n ? 'Save changes' : 'Add note') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    let relatedList = n ? (n.relatedEntities||[]).slice() : (presetRelated ? [presetRelated] : []);
+    function renderChips(){
+      const wrap = overlay.querySelector('#relatedChips');
+      wrap.innerHTML = relatedList.length ? relatedList.map(function(r, idx){
+        const ent = findRelatable(r.type, r.id);
+        const name = ent ? (ent.name || ent.title) : '(missing)';
+        return '<span class="chip chip-tag">' + esc(r.type) + ': ' + esc(name) + ' <button type="button" data-remove-idx="'+idx+'" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;">\u00d7</button></span>';
+      }).join('') : '<span class="writers-label" style="font-style:italic;">none yet</span>';
+      wrap.querySelectorAll('[data-remove-idx]').forEach(function(btn){
+        btn.addEventListener('click', function(){ relatedList.splice(parseInt(btn.getAttribute('data-remove-idx'),10),1); renderChips(); });
+      });
+    }
+    function populateRelEntitySelect(){
+      const type = overlay.querySelector('#nt-rel-type').value;
+      const sel = overlay.querySelector('#nt-rel-entity');
+      const pool = type==='release' ? albums : entityArray(type);
+      sel.innerHTML = pool.slice().sort(function(a,b){ return (a.name||a.title||'').localeCompare(b.name||b.title||''); }).map(function(x){
+        return '<option value="'+esc(x.id)+'">'+esc(x.name||x.title)+'</option>';
+      }).join('');
+    }
+    populateRelEntitySelect();
+    renderChips();
+    overlay.querySelector('#nt-rel-type').addEventListener('change', populateRelEntitySelect);
+    overlay.querySelector('#addRelatedBtn').addEventListener('click', function(){
+      const type = overlay.querySelector('#nt-rel-type').value;
+      const relId = overlay.querySelector('#nt-rel-entity').value;
+      if(!relId) return;
+      if(relatedList.some(function(r){ return r.type===type && r.id===relId; })) return;
+      relatedList.push({ type: type, id: relId });
+      renderChips();
+    });
+
+    overlay.querySelector('#ntCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(n){
+      overlay.querySelector('#ntDeleteBtn').addEventListener('click', async function(){
+        if(!confirm('Delete this note?')) return;
+        notes = notes.filter(function(x){ return x.id!==n.id; });
+        overlay.remove();
+        await saveNotes();
+        toast('Note deleted');
+        render();
+      });
+    }
+    overlay.querySelector('#ntSaveBtn').addEventListener('click', async function(){
+      const title = overlay.querySelector('#nt-title').value.trim();
+      const type = overlay.querySelector('#nt-type').value;
+      const text = overlay.querySelector('#nt-text').value.trim();
+      const tagsRaw = overlay.querySelector('#nt-tags').value.trim();
+      const pinned = overlay.querySelector('#nt-pinned').checked;
+      if(!text){ toast('Write something in the note first'); return; }
+      const tags = tagsRaw ? tagsRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      if(n){
+        Object.assign(n, {title, type, text, tags, pinned, relatedEntities: relatedList});
+      } else {
+        notes.push({ id: 'nt'+Date.now()+Math.random().toString(36).slice(2,7), title, type, text, tags, pinned, relatedEntities: relatedList, createdAt: Date.now() });
+      }
+      overlay.remove();
+      await saveNotes();
+      toast(n ? 'Note updated' : 'Note added');
+      render();
+    });
+    setTimeout(function(){ overlay.querySelector('#nt-text').focus(); }, 30);
+  }
+
+  function renderNotes(){
+    const list = notes.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0) || b.createdAt-a.createdAt; });
+    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newNoteBtn" type="button">+ New note</button></div>';
+    if(!list.length){
+      html += '<div class="empty"><strong>No notes yet</strong>Capture a thought, question, or observation \u2014 and link it to whoever or whatever it\u2019s about.</div>';
+    } else {
+      html += '<div class="writer-index">' + list.map(function(nt){
+        const relNames = (nt.relatedEntities||[]).map(function(r){
+          const ent = findRelatable(r.type, r.id);
+          return ent ? (ent.name || ent.title) : null;
+        }).filter(Boolean);
+        return '<div class="writer-row" data-edit-note="' + esc(nt.id) + '">' +
+          '<div class="writer-name" style="font-size:16px;">' + (nt.title?esc(nt.title):esc(nt.type)) + (nt.pinned ? ' <span class="admin-through">PINNED</span>' : '') + '</div>' +
+          '<div class="writer-count">' + new Date(nt.createdAt).toLocaleDateString() + '</div>' +
+          '<div class="writer-songs">' + esc((nt.text||'').slice(0,100)) + ((nt.text||'').length>100?'\u2026':'') + (relNames.length ? ' \u2014 ' + relNames.join(', ') : '') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+    mainEl.innerHTML = html;
+    document.getElementById('newNoteBtn').addEventListener('click', function(){ openNoteModal(null, null); });
+    mainEl.querySelectorAll('[data-edit-note]').forEach(function(row){
+      row.addEventListener('click', function(){ openNoteModal(row.getAttribute('data-edit-note')); });
     });
   }
 
@@ -1902,7 +2086,8 @@
       artists: artists,
       people: people,
       companies: companies,
-      affiliations: affiliations
+      affiliations: affiliations,
+      notes: notes
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -1935,7 +2120,7 @@
     const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
     const restoredCompanies = data.companies || data.publishers || [];
     const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length;
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
@@ -1945,6 +2130,7 @@
     legacyContacts = restoredLegacyContacts;
     legacyLabels = restoredLegacyLabels;
     affiliations = data.affiliations || [];
+    notes = data.notes || [];
     entries.forEach(normalize);
     migrateContactsIntoPeople();
     migrateLabelsIntoCompanies();
@@ -1954,6 +2140,7 @@
     await saveEntityArray('person');
     await saveEntityArray('company');
     await saveAffiliations();
+    await saveNotes();
     toast('Backup restored');
     view = 'songs'; render();
   }
@@ -2225,6 +2412,7 @@
     else if(v==='companies'){ view='entityIndex'; entityIndexType='company'; }
     else if(v==='tags'){ view='tags'; }
     else if(v==='albums'){ view='albums'; }
+    else if(v==='notes'){ view='notes'; }
     else if(v==='stats'){ view='stats'; }
     else { return; }
     render();
