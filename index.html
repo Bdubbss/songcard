@@ -225,6 +225,7 @@
   <input type="file" id="restoreFile" accept=".json" style="display:none;"> ·
   <button id="resetBtn" type="button">Clear all entries</button> ·
   <button id="signOutBtn" type="button">Sign out</button>
+  <br><span style="opacity:0.7;">Advanced:</span> <button id="migrateDbBtn" type="button">Migrate to normalized database (beta)</button>
 </footer>
 
 <div id="toast" class="toast"></div>
@@ -249,6 +250,14 @@
     <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px; margin-bottom:20px;">This is your private catalog. Sign in with the Google account tied to this project to view it.</div>
     <button class="btn btn-primary" id="googleSignInBtn" type="button" style="width:100%;">Sign in with Google</button>
     <div id="authError" style="margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--stamp);"></div>
+  </div>
+</div>
+<div id="migrationPanel" style="display:none; position:fixed; inset:0; background:rgba(33,29,24,0.72); z-index:70; align-items:center; justify-content:center; padding:24px;">
+  <div class="modal" style="max-width:620px; width:100%;">
+    <h2>Database migration</h2>
+    <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">Nothing currently stored is touched or deleted \u2014 this only writes new, separate collections.</div>
+    <pre id="migrationLog" style="white-space:pre-wrap; word-break:break-word; font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.5; background:#fffdf7; border:1.5px solid var(--ink); border-radius:2px; padding:12px; max-height:55vh; overflow-y:auto; margin:14px 0;"></pre>
+    <div class="modal-actions"><button class="btn btn-primary" id="closeMigrationPanel" type="button">Close</button></div>
   </div>
 </div>
 
@@ -319,6 +328,67 @@
     await db.collection('songcard').doc(key).set({ value: value });
     return { ok: true };
   }
+
+  // ===== Normalized Firestore data-access layer =====
+  // One document per record, keyed by the record's existing id. Built so future
+  // collections (Notes, Watchlist, Outreach, Interactions, Snapshots...) can each
+  // plug in here without another rewrite. Not yet used by the live app (see the
+  // migration tool below) — this phase only builds and verifies it.
+  function sanitizeForFirestore(value){
+    if(Array.isArray(value)) return value.map(sanitizeForFirestore);
+    if(value && typeof value === 'object'){
+      const out = {};
+      Object.keys(value).forEach(function(k){
+        const v = value[k];
+        out[k] = (v === undefined) ? null : sanitizeForFirestore(v);
+      });
+      return out;
+    }
+    return (value === undefined) ? null : value;
+  }
+  const DataStore = {
+    async getAll(collectionName){
+      if(!db) return [];
+      const snap = await db.collection(collectionName).get();
+      const out = [];
+      snap.forEach(function(doc){ out.push(Object.assign({ id: doc.id }, doc.data())); });
+      return out;
+    },
+    async get(collectionName, id){
+      if(!db || !id) return null;
+      const doc = await db.collection(collectionName).doc(id).get();
+      return doc.exists ? Object.assign({ id: doc.id }, doc.data()) : null;
+    },
+    async set(collectionName, id, data){
+      if(!db || !id) return null;
+      const clean = sanitizeForFirestore(data);
+      delete clean.id;
+      await db.collection(collectionName).doc(id).set(clean);
+      return { ok: true };
+    },
+    async remove(collectionName, id){
+      if(!db || !id) return null;
+      await db.collection(collectionName).doc(id).delete();
+      return { ok: true };
+    },
+    async batchSet(collectionName, records){
+      if(!db) return { written: 0 };
+      let written = 0;
+      for(let i=0; i<records.length; i+=450){
+        const chunk = records.slice(i, i+450);
+        const batch = db.batch();
+        chunk.forEach(function(rec){
+          const ref = db.collection(collectionName).doc(rec.id);
+          const clean = sanitizeForFirestore(rec);
+          delete clean.id;
+          batch.set(ref, clean);
+        });
+        await batch.commit();
+        written += chunk.length;
+      }
+      return { written: written };
+    }
+  };
 
   function toast(msg){
     const t = document.getElementById('toast');
@@ -1475,6 +1545,126 @@
     }).filter(Boolean);
   }
   // ===== Full backup / restore (protects everything before any future schema change) =====
+  // ===== Normalized-database migration (one-time, explicit, user-triggered) =====
+  function showMigrationPanel(){
+    document.getElementById('migrationLog').textContent = '';
+    document.getElementById('migrationPanel').style.display = 'flex';
+  }
+  function logMigration(line){
+    const el = document.getElementById('migrationLog');
+    el.textContent += (el.textContent ? '\n' : '') + line;
+    el.scrollTop = el.scrollHeight;
+  }
+  async function runNormalizedMigration(){
+    if(!db){ toast('Not connected to a database yet'); return; }
+    const counts = {
+      songs: entries.length,
+      releases: albums.length,
+      artists: artists.length,
+      people: people.length,
+      companies: companies.length
+    };
+    const summaryLines = Object.keys(counts).map(function(k){ return k + ': ' + counts[k]; }).join('\n');
+    const proceed = confirm(
+      'This creates NEW, separate Firestore collections (one document per record) alongside your existing data.\n\n' +
+      'Nothing currently stored will be modified or deleted.\n\n' +
+      'Records to migrate:\n' + summaryLines + '\n\n' +
+      'A fresh full backup will download automatically first as a safety net. Continue?'
+    );
+    if(!proceed) return;
+
+    exportFullBackup();
+    showMigrationPanel();
+    logMigration('Backup downloaded. Starting migration\u2026');
+    logMigration('');
+    logMigration('Source record counts:');
+    Object.keys(counts).forEach(function(k){ logMigration('  ' + k + ': ' + counts[k]); });
+    logMigration('');
+
+    try{
+      logMigration('Writing songs\u2026');
+      await DataStore.batchSet('songs', entries);
+      logMigration('Writing releases\u2026');
+      await DataStore.batchSet('releases', albums);
+      logMigration('Writing artists\u2026');
+      await DataStore.batchSet('artists', artists);
+      logMigration('Writing people\u2026');
+      await DataStore.batchSet('people', people);
+      logMigration('Writing companies\u2026');
+      await DataStore.batchSet('companies', companies);
+    }catch(err){
+      logMigration('');
+      logMigration('ERROR during write phase: ' + (err && err.message ? err.message : err));
+      logMigration('Your existing data was not touched. Safe to retry.');
+      toast('Migration failed \u2014 see log');
+      return;
+    }
+
+    logMigration('');
+    logMigration('Verifying record counts in the new collections\u2026');
+    const collectionNames = ['songs','releases','artists','people','companies'];
+    const verifyCounts = {};
+    for(const name of collectionNames){
+      const snap = await db.collection(name).get();
+      verifyCounts[name] = snap.size;
+    }
+    let countsOk = true;
+    const countKeyMap = { songs:'songs', releases:'releases', artists:'artists', people:'people', companies:'companies' };
+    Object.keys(countKeyMap).forEach(function(k){
+      const expected = counts[k], found = verifyCounts[k];
+      const match = expected === found;
+      if(!match) countsOk = false;
+      logMigration((match ? '\u2713' : '\u2717 MISMATCH') + '  ' + k + ': expected ' + expected + ', found ' + found);
+    });
+
+    logMigration('');
+    logMigration('Validating relationships (pre-existing issues would show up here too, not just new ones)\u2026');
+    const issues = [];
+    const artistIds = new Set(artists.map(function(a){ return a.id; }));
+    const personIds = new Set(people.map(function(p){ return p.id; }));
+    const companyIds = new Set(companies.map(function(c){ return c.id; }));
+    const releaseIds = new Set(albums.map(function(a){ return a.id; }));
+
+    entries.forEach(function(e){
+      if(e.artistId && !artistIds.has(e.artistId)) issues.push('Song "' + e.song + '" \u2192 missing artist (' + e.artistId + ')');
+      if(e.albumId && !releaseIds.has(e.albumId)) issues.push('Song "' + e.song + '" \u2192 missing release (' + e.albumId + ')');
+      if(e.labelId && !companyIds.has(e.labelId)) issues.push('Song "' + e.song + '" \u2192 missing label company (' + e.labelId + ')');
+      (e.writerCredits||[]).forEach(function(c){
+        if(c.writerId && !personIds.has(c.writerId)) issues.push('Song "' + e.song + '" credit \u2192 missing person (' + c.writerId + ')');
+        if(c.publisherId && !companyIds.has(c.publisherId)) issues.push('Song "' + e.song + '" credit \u2192 missing publisher company (' + c.publisherId + ')');
+      });
+    });
+    albums.forEach(function(a){
+      if(a.artistId && !artistIds.has(a.artistId)) issues.push('Release "' + a.title + '" \u2192 missing artist (' + a.artistId + ')');
+      if(a.labelId && !companyIds.has(a.labelId)) issues.push('Release "' + a.title + '" \u2192 missing label company (' + a.labelId + ')');
+    });
+    artists.forEach(function(a){
+      if(a.managerPersonId && !personIds.has(a.managerPersonId)) issues.push('Artist "' + a.name + '" \u2192 missing manager person (' + a.managerPersonId + ')');
+    });
+    companies.forEach(function(c){
+      if(c.parentCompanyId && !companyIds.has(c.parentCompanyId)) issues.push('Company "' + c.name + '" \u2192 missing parent company (' + c.parentCompanyId + ')');
+      if(c.possibleDuplicateOf && !companyIds.has(c.possibleDuplicateOf)) issues.push('Company "' + c.name + '" \u2192 missing duplicate-flag target (' + c.possibleDuplicateOf + ')');
+    });
+    people.forEach(function(p){
+      if(p.possibleDuplicateOf && !personIds.has(p.possibleDuplicateOf)) issues.push('Person "' + p.name + '" \u2192 missing duplicate-flag target (' + p.possibleDuplicateOf + ')');
+    });
+
+    if(issues.length){
+      logMigration(issues.length + ' relationship issue(s) found:');
+      issues.forEach(function(i){ logMigration('  \u2022 ' + i); });
+    } else {
+      logMigration('All relationships resolved correctly \u2014 no dangling references found.');
+    }
+
+    logMigration('');
+    logMigration('Your original storage (song_entries_v3, song_albums_v1, song_writers_v1, song_publishers_v1) was NOT modified, overwritten, or deleted. The live app keeps reading from it exactly as before \u2014 nothing about how SongCard behaves has changed.');
+    logMigration('');
+    logMigration(countsOk && !issues.length
+      ? 'MIGRATION COMPLETE \u2014 all counts match, no relationship issues. Safe to review the new collections in the Firebase console whenever you\u2019re ready.'
+      : 'MIGRATION COMPLETE WITH NOTES \u2014 see above. Nothing was deleted, so this is safe to re-run once any issues are addressed.');
+    toast('Migration finished \u2014 see the log');
+  }
+
   function exportFullBackup(){
     const backup = {
       schemaVersion: SCHEMA_VERSION,
@@ -1905,6 +2095,8 @@
   }
   document.getElementById('googleSignInBtn').addEventListener('click', signIn);
   document.getElementById('signOutBtn').addEventListener('click', signOutUser);
+  document.getElementById('migrateDbBtn').addEventListener('click', runNormalizedMigration);
+  document.getElementById('closeMigrationPanel').addEventListener('click', function(){ document.getElementById('migrationPanel').style.display = 'none'; });
 
   if(configIsPlaceholder){
     loadEntries();
