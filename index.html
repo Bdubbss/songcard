@@ -204,7 +204,7 @@
     <option value="artists">Artists</option>
     <option value="companies">Companies</option>
     <option value="tags">Tags</option>
-    <option value="albums">Albums</option>
+    <option value="albums">Releases</option>
     <option value="stats">Stats</option>
   </select>
   <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
@@ -454,6 +454,32 @@
 
   function findAlbum(id){ if(!id) return null; return albums.find(function(a){ return a.id===id; }) || null; }
   function songsForAlbum(id){ return entries.filter(function(e){ return e.albumId === id; }); }
+  function normalizeRelease(a){
+    if(!a.releaseType) a.releaseType = 'Album';
+    if(!a.photoUrl) a.photoUrl = '';
+    if(!a.labelId) a.labelId = '';
+    if(!a.artistId && a.artist){
+      const art = findOrCreateEntity('artist', a.artist);
+      if(art) a.artistId = art.id;
+    }
+    if(!a.artistId) a.artistId = '';
+    return a;
+  }
+  function releaseArtistName(a){ const art = findEntityById('artist', a.artistId); return art ? art.name : (a.artist||''); }
+  function releaseLabelName(a){ const l = findEntityById('company', a.labelId); return l ? l.name : ''; }
+  function keyCollaboratorsForRelease(id){
+    const counts = new Map();
+    songsForAlbum(id).forEach(function(s){
+      (s.writerCredits||[]).forEach(function(c){
+        if(!c.writerId) return;
+        counts.set(c.writerId, (counts.get(c.writerId)||0) + 1);
+      });
+    });
+    return Array.from(counts.entries())
+      .map(function(pair){ return { personId: pair[0], count: pair[1] }; })
+      .sort(function(a,b){ return b.count - a.count; })
+      .slice(0, 8);
+  }
 
   function artistName(e){ const a = findEntityById('artist', e.artistId); return a ? a.name : (e.artist||''); }
   function labelName(e){ const l = findEntityById('company', e.labelId); return l ? l.name : ''; }
@@ -620,6 +646,7 @@
     }catch(e){ entries = []; }
     try{ const r = await storageGet(ALBUM_STORAGE_KEY); albums = r && r.value ? JSON.parse(r.value) : []; }catch(e){ albums = []; }
     try{ const r = await storageGet(ARTIST_STORAGE_KEY); artists = r && r.value ? JSON.parse(r.value) : []; }catch(e){ artists = []; }
+    albums.forEach(normalizeRelease);
     try{ const r = await storageGet(PERSON_STORAGE_KEY); people = r && r.value ? JSON.parse(r.value) : []; }catch(e){ people = []; }
     try{ const r = await storageGet(COMPANY_STORAGE_KEY); companies = r && r.value ? JSON.parse(r.value) : []; }catch(e){ companies = []; }
     try{ const r = await storageGet(LEGACY_LABEL_STORAGE_KEY); legacyLabels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyLabels = []; }
@@ -632,6 +659,7 @@
     if(peopleChanged){ saveEntityArray('artist'); saveEntityArray('person'); }
     if(companiesChanged){ saveEntityArray('company'); }
     if(entries.length){ saveEntries(); saveEntityArray('artist'); }
+    if(albums.length){ saveAlbums(); saveEntityArray('artist'); }
   }
 
   // ===== One-time migration: legacy Publisher records get companyTypes/parentCompanyId; legacy Label records also become Company records (never auto-merged with an existing same-named Company) =====
@@ -1187,18 +1215,18 @@
 
   function renderAlbums(){
     if(albums.length===0){
-      mainEl.innerHTML = '<div class="empty"><strong>No albums yet</strong>Create one from a card\u2019s Album field, or add one directly here.<br><br><button class="btn btn-primary" id="newAlbumFromEmpty" type="button" style="margin-top:10px;">+ New album</button></div>';
+      mainEl.innerHTML = '<div class="empty"><strong>No releases yet</strong>Create one from a card\u2019s Album field, or add one directly here.<br><br><button class="btn btn-primary" id="newAlbumFromEmpty" type="button" style="margin-top:10px;">+ New release</button></div>';
       document.getElementById('newAlbumFromEmpty').addEventListener('click', function(){ openAlbumModal(null); });
       return;
     }
     const rows = albums.slice().sort(function(a,b){ return (a.title||'').localeCompare(b.title||''); });
-    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newAlbumBtn" type="button">+ New album</button></div>';
+    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newAlbumBtn" type="button">+ New release</button></div>';
     html += '<div class="writer-index">' + rows.map(function(a){
       const songs = songsForAlbum(a.id);
       return '<div class="writer-row" data-album-row="' + esc(a.id) + '">' +
-        '<div class="writer-name">' + esc(a.title||'Untitled album') + '</div>' +
+        '<div class="writer-name">' + esc(a.title||'Untitled release') + ' <span class="admin-through">' + esc((a.releaseType||'Album').toUpperCase()) + '</span></div>' +
         '<div class="writer-count">' + songs.length + ' song' + (songs.length===1?'':'s') + '</div>' +
-        '<div class="writer-songs">' + esc(a.artist||'') + (a.releaseDate ? ' \u00b7 ' + esc(a.releaseDate) : '') + '</div>' +
+        '<div class="writer-songs">' + esc(releaseArtistName(a)) + (a.releaseDate ? ' \u00b7 ' + esc(a.releaseDate) : '') + '</div>' +
       '</div>';
     }).join('') + '</div>';
     mainEl.innerHTML = html;
@@ -1212,27 +1240,52 @@
     if(!album){ view='albums'; render(); return; }
     let list = entries.filter(function(e){ return e.albumId === albumFilterId && matchesSearch(e,q); });
     list = applySort(applyFilters(list));
-    let html = '<button class="back-link" id="backToAlbums">\u2190 All albums</button>';
+    const collaborators = keyCollaboratorsForRelease(album.id);
+    let html = '<button class="back-link" id="backToAlbums">\u2190 All releases</button>';
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
-      '<div class="song-title" style="font-size:22px;">' + esc(album.title||'Untitled album') + '</div>' +
-      '<div class="artist" style="margin-top:4px;">' + esc(album.artist||'') + (album.releaseDate ? ' \u00b7 ' + esc(album.releaseDate) : '') + '</div>' +
+      '<div class="entity-header">' +
+      (album.photoUrl ? '<img class="entity-photo" src="'+esc(album.photoUrl)+'" alt="" onerror="this.style.display=\'none\';">' : '<div class="entity-photo-placeholder">no cover</div>') +
+      '<div style="flex:1; min-width:0;">' +
+      '<div class="song-title" style="font-size:22px;">' + esc(album.title||'Untitled release') + ' <span class="admin-through">' + esc((album.releaseType||'Album').toUpperCase()) + '</span></div>' +
+      (album.artistId && findEntityById('artist', album.artistId) ? '<button class="artist" data-entity-type="artist" data-entity-id="'+esc(album.artistId)+'" style="margin-top:2px;">'+esc(releaseArtistName(album))+'</button>' : (releaseArtistName(album) ? '<div class="artist" style="margin-top:2px;">'+esc(releaseArtistName(album))+'</div>' : '')) +
+      (album.releaseDate ? '<div class="publisher">Released: ' + esc(album.releaseDate) + '</div>' : '') +
+      (album.labelId && findEntityById('company', album.labelId) ? '<div class="publisher">Label: <button data-entity-type="company" data-entity-id="'+esc(album.labelId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(releaseLabelName(album))+'</button></div>' : '') +
       (album.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(album.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px;">' +
-        '<button class="icon-btn" id="editAlbumBtn" type="button">edit album</button>' +
-        '<button class="icon-btn" id="deleteAlbumBtn" type="button">delete album</button>' +
+        '<button class="icon-btn" id="editAlbumBtn" type="button">edit release</button>' +
+        '<button class="icon-btn" id="deleteAlbumBtn" type="button">delete release</button>' +
+      '</div>' +
+      '</div>' +
       '</div>' +
     '</div>';
-    html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + ' logged from this album</div>';
-    html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Assign this album to a card to see it here.</div>';
+    if(collaborators.length){
+      html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+        '<div class="writers-label">Key collaborators</div>' +
+        '<div class="chip-row" style="margin-top:6px;">' + collaborators.map(function(c){
+          const p = findEntityById('person', c.personId);
+          if(!p) return '';
+          return '<button class="chip" data-entity-type="person" data-entity-id="'+esc(c.personId)+'">'+esc(p.name)+' <span class="admin-through">\u2014 '+c.count+' track'+(c.count===1?'':'s')+'</span></button>';
+        }).join('') + '</div>' +
+      '</div>';
+    }
+    html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + ' logged from this release</div>';
+    html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Assign this release to a card to see it here.</div>';
     mainEl.innerHTML = html;
     document.getElementById('backToAlbums').addEventListener('click', function(){ view='albums'; render(); });
     document.getElementById('editAlbumBtn').addEventListener('click', function(){ openAlbumModal(album.id); });
     document.getElementById('deleteAlbumBtn').addEventListener('click', async function(){
-      if(!confirm('Delete "' + album.title + '"? Songs stay, they just lose the album link.')) return;
+      if(!confirm('Delete "' + album.title + '"? Songs stay, they just lose the release link.')) return;
       albums = albums.filter(function(a){ return a.id !== album.id; });
       entries.forEach(function(e){ if(e.albumId === album.id) e.albumId = ''; });
       await saveAlbums(); await saveEntries();
-      toast('Album deleted'); view = 'albums'; render();
+      toast('Release deleted'); view = 'albums'; render();
+    });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
     });
     attachCardHandlers();
   }
@@ -1240,18 +1293,25 @@
     const a = id ? findAlbum(id) : null;
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
+    const releaseTypes = ['Album','EP','Single','Mixtape','Soundtrack','Compilation','Other'];
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
-        '<h2>' + (a ? 'Edit album' : 'New album') + '</h2>' +
-        '<div class="field"><label>Album title</label><input id="al-title" type="text" value="' + (a?esc(a.title):'') + '" placeholder="e.g. Late Bloom"></div>' +
+        '<h2>' + (a ? 'Edit release' : 'New release') + '</h2>' +
+        '<div class="field"><label>Title</label><input id="al-title" type="text" value="' + (a?esc(a.title):'') + '" placeholder="e.g. Late Bloom"></div>' +
+        '<div class="field"><label>Photo / artwork URL (optional)</label><input id="al-photo" type="text" value="' + (a?esc(a.photoUrl||''):'') + '" placeholder="Paste an image link"></div>' +
         '<div class="field-row">' +
-          '<div class="field"><label>Artist</label><input id="al-artist" type="text" value="' + (a?esc(a.artist||''):'') + '" placeholder="Who released it"></div>' +
+          '<div class="field"><label>Artist</label><input id="al-artist" type="text" list="releaseArtistNamesList" value="' + (a?esc(releaseArtistName(a)):'') + '" placeholder="Who released it"></div>' +
+          '<div class="field"><label>Type</label><select id="al-type">' + releaseTypes.map(function(t){ return '<option value="'+t+'"'+((a?a.releaseType:'Album')===t?' selected':'')+'>'+t+'</option>'; }).join('') + '</select></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Label (optional)</label><input id="al-label" type="text" list="releaseLabelNamesList" value="' + (a?esc(releaseLabelName(a)):'') + '" placeholder="Record label"></div>' +
           '<div class="field"><label>Release date (optional)</label><input id="al-date" type="text" value="' + (a?esc(a.releaseDate||''):'') + '" placeholder="e.g. 2024"></div>' +
         '</div>' +
-        '<div class="field"><label>Notes (optional)</label><textarea id="al-notes">' + (a?esc(a.notes||''):'') + '</textarea></div>' +
+        buildDatalist('releaseArtistNamesList','artist') + buildDatalist('releaseLabelNamesList','company') +
+        '<div class="field"><label>About / A&amp;R notes (optional)</label><textarea id="al-notes" style="min-height:100px;" placeholder="Thesis, standout tracks, what the rollout got right...">' + (a?esc(a.notes||''):'') + '</textarea></div>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-ghost" id="alCancelBtn" type="button">Cancel</button>' +
-          '<button class="btn btn-primary" id="alSaveBtn" type="button">' + (a ? 'Save changes' : 'Create album') + '</button>' +
+          '<button class="btn btn-primary" id="alSaveBtn" type="button">' + (a ? 'Save changes' : 'Create release') + '</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -1259,14 +1319,20 @@
     overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
     overlay.querySelector('#alSaveBtn').addEventListener('click', async function(){
       const title = overlay.querySelector('#al-title').value.trim();
-      const artist = overlay.querySelector('#al-artist').value.trim();
+      const artistTxt = overlay.querySelector('#al-artist').value.trim();
+      const labelTxt = overlay.querySelector('#al-label').value.trim();
+      const releaseType = overlay.querySelector('#al-type').value;
       const releaseDate = overlay.querySelector('#al-date').value.trim();
+      const photoUrl = overlay.querySelector('#al-photo').value.trim();
       const notes = overlay.querySelector('#al-notes').value.trim();
-      if(!title){ toast('Give the album a title first'); return; }
-      if(a){ Object.assign(a, {title, artist, releaseDate, notes}); }
-      else{ albums.push({ id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title, artist, releaseDate, notes }); }
-      overlay.remove(); await saveAlbums();
-      toast(a ? 'Album updated' : 'Album created'); render();
+      if(!title){ toast('Give the release a title first'); return; }
+      const artistId = artistTxt ? (findOrCreateEntity('artist', artistTxt) || {}).id || '' : '';
+      const labelId = labelTxt ? (findOrCreateEntity('company', labelTxt) || {}).id || '' : '';
+      if(a){ Object.assign(a, {title, artistId, labelId, releaseType, releaseDate, photoUrl, notes}); }
+      else{ albums.push({ id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title, artistId, labelId, releaseType, releaseDate, photoUrl, notes }); }
+      overlay.remove();
+      await saveEntityArray('artist'); await saveEntityArray('company'); await saveAlbums();
+      toast(a ? 'Release updated' : 'Release created'); render();
     });
     setTimeout(function(){ overlay.querySelector('#al-title').focus(); }, 30);
   }
@@ -1495,7 +1561,7 @@
       const albumTitle = (iAlbum>-1 ? row[iAlbum] : '').trim();
       if(albumTitle){
         let alb = albums.find(function(a){ return (a.title||'').toLowerCase() === albumTitle.toLowerCase(); });
-        if(!alb){ alb = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: albumTitle, artist: artistTxt, releaseDate: '', notes: '' }; albums.push(alb); }
+        if(!alb){ alb = normalizeRelease({ id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: albumTitle, artist: artistTxt, releaseDate: '', notes: '' }); albums.push(alb); }
         albumId = alb.id;
       }
       let artistId = '';
@@ -1584,17 +1650,17 @@
           '<button type="button" class="add-credit-btn" id="addCreditBtn">+ Add a credit</button>' +
           '<div class="hint">Set the role for each person \u2014 Songwriter, Producer, Mixing Engineer, whatever fits. Publisher only matters for Songwriter credits.</div>' +
         '</div>' +
-        '<div class="field"><label>Album (optional)</label><select id="f-album">' +
-          '<option value="">\u2014 No album \u2014</option>' +
+        '<div class="field"><label>Release (optional)</label><select id="f-album">' +
+          '<option value="">\u2014 No release \u2014</option>' +
           albums.slice().sort(function(x,y){return (x.title||'').localeCompare(y.title||'');}).map(function(alb){
-            return '<option value="'+esc(alb.id)+'"'+(e && e.albumId===alb.id?' selected':'')+'>'+esc(alb.title)+(alb.artist?' \u2014 '+esc(alb.artist):'')+'</option>';
+            return '<option value="'+esc(alb.id)+'"'+(e && e.albumId===alb.id?' selected':'')+'>'+esc(alb.title)+(releaseArtistName(alb)?' \u2014 '+esc(releaseArtistName(alb)):'')+'</option>';
           }).join('') +
-          '<option value="__new__">+ Create new album</option>' +
+          '<option value="__new__">+ Create new release</option>' +
         '</select></div>' +
         '<div class="lookup-box" id="newAlbumBox" style="display:none;">' +
-          '<div class="lookup-title">New album</div>' +
-          '<div class="field" style="margin-bottom:8px;"><input id="na-title" type="text" placeholder="Album title"></div>' +
-          '<div class="field-row"><div class="field" style="margin-bottom:0;"><input id="na-artist" type="text" placeholder="Album artist" value="'+(e?esc(artistName(e)):'')+'"></div><div class="field" style="margin-bottom:0;"><input id="na-date" type="text" placeholder="Release date (optional)"></div></div>' +
+          '<div class="lookup-title">New release</div>' +
+          '<div class="field" style="margin-bottom:8px;"><input id="na-title" type="text" placeholder="Release title"></div>' +
+          '<div class="field-row"><div class="field" style="margin-bottom:0;"><input id="na-artist" type="text" placeholder="Release artist" value="'+(e?esc(artistName(e)):'')+'"></div><div class="field" style="margin-bottom:0;"><input id="na-date" type="text" placeholder="Release date (optional)"></div></div>' +
         '</div>' +
         '<div class="field"><label>Genre / mood tags</label><input id="f-tags" type="text" value="' + (e?esc((e.tags||[]).join(', ')):'') + '" placeholder="e.g. bedroom pop, moody"></div>' +
         '<div class="field"><label>Your rating</label><div class="star-picker" id="starPicker"></div></div>' +
@@ -1701,10 +1767,11 @@
       let albumsChanged = false;
       if(albumId === '__new__'){
         const naTitle = overlay.querySelector('#na-title').value.trim();
-        if(!naTitle){ toast('Give the new album a title, or pick "No album"'); return; }
-        const naArtist = overlay.querySelector('#na-artist').value.trim();
+        if(!naTitle){ toast('Give the new release a title, or pick "No release"'); return; }
+        const naArtistTxt = overlay.querySelector('#na-artist').value.trim();
         const naDate = overlay.querySelector('#na-date').value.trim();
-        const newAlbum = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: naTitle, artist: naArtist, releaseDate: naDate, notes: '' };
+        const naArtistId = naArtistTxt ? (findOrCreateEntity('artist', naArtistTxt) || {}).id || '' : '';
+        const newAlbum = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title: naTitle, artistId: naArtistId, labelId: '', releaseType: 'Album', photoUrl: '', releaseDate: naDate, notes: '' };
         albums.push(newAlbum); albumId = newAlbum.id; albumsChanged = true;
       }
 
