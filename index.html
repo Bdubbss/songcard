@@ -114,6 +114,9 @@
   .filter-banner{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-bottom:6px;}
   .stats-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-top:18px;}
   .stat-tile{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); padding:16px; box-shadow:3px 3px 0 rgba(33,29,24,0.14);}
+  .entity-header{display:flex; gap:16px; align-items:flex-start;}
+  .entity-photo{width:96px; height:96px; object-fit:cover; border-radius:4px; border:1.5px solid var(--ink); background:var(--kraft); flex-shrink:0;}
+  .entity-photo-placeholder{width:96px; height:96px; border-radius:4px; border:1.5px dashed var(--ink-soft); background:var(--kraft); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); text-align:center; padding:6px;}
   .stat-num{font-family:'Roboto Slab',serif; font-weight:900; font-size:32px; line-height:1;}
   .stat-label{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); text-transform:uppercase; margin-top:4px; letter-spacing:0.05em;}
   .stats-section{margin-top:26px;}
@@ -857,6 +860,9 @@
     const hasParent = (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId)) ||
                        (type==='publisher' && ent.administeredBy && findEntityById('publisher', ent.administeredBy));
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div class="entity-header">' +
+      (ent.photoUrl ? '<img class="entity-photo" src="'+esc(ent.photoUrl)+'" alt="" onerror="this.style.display=\'none\';">' : '<div class="entity-photo-placeholder">no photo</div>') +
+      '<div style="flex:1; min-width:0;">' +
       '<div class="song-title" style="font-size:22px;">' + esc(ent.name) + (ent.isMajor ? ' <span class="stamp-mark stamp-priority" style="font-size:9px; vertical-align:middle;">MAJOR</span>' : '') + '</div>' +
       (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + (ent.pro ? ' \u00b7 ' + esc(ent.pro) : '') + '</div>' : (ent.pro ? '<div class="publisher">PRO: ' + esc(ent.pro) + '</div>' : '')) +
       (type==='label' && ent.parentLabelId && findEntityById('label', ent.parentLabelId) ? '<div class="publisher">Imprint of <button data-entity-type="label" data-entity-id="'+esc(ent.parentLabelId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('label', ent.parentLabelId).name)+'</button></div>' : '') +
@@ -872,6 +878,8 @@
         '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
       '</div>' +
+      '</div>' + // close flex:1 name/details wrapper
+      '</div>' + // close entity-header
     '</div>';
     if(type==='publisher'){
       const seen = new Set();
@@ -988,8 +996,9 @@
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (ent ? 'Edit ' + meta.label.toLowerCase() : 'New ' + meta.label.toLowerCase()) + '</h2>' +
         '<div class="field"><label>Name</label><input id="ent-name" type="text" value="' + (ent?esc(ent.name):'') + '" placeholder="' + meta.label + ' name"></div>' +
+        '<div class="field"><label>Photo URL (optional)</label><input id="ent-photo" type="text" value="' + (ent?esc(ent.photoUrl||''):'') + '" placeholder="Paste an image link"><div class="hint">Right-click any image online and \u201cCopy image address,\u201d then paste it here.</div></div>' +
         extraFields +
-        '<div class="field"><label>Notes (optional)</label><textarea id="ent-notes" placeholder="Anything worth remembering…">' + (ent?esc(ent.notes||''):'') + '</textarea></div>' +
+        '<div class="field"><label>About / notes</label><textarea id="ent-notes" placeholder="Bio, background, anything worth remembering\u2026" style="min-height:120px;">' + (ent?esc(ent.notes||''):'') + '</textarea></div>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-ghost" id="entCancelBtn" type="button">Cancel</button>' +
           '<button class="btn btn-primary" id="entSaveBtn" type="button">' + (ent?'Save changes':'Create') + '</button>' +
@@ -1006,8 +1015,9 @@
     overlay.querySelector('#entSaveBtn').addEventListener('click', async function(){
       const name = overlay.querySelector('#ent-name').value.trim();
       const notes = overlay.querySelector('#ent-notes').value.trim();
+      const photoUrl = overlay.querySelector('#ent-photo').value.trim();
       if(!name){ toast('Give it a name first'); return; }
-      const extra = {};
+      const extra = { photoUrl: photoUrl };
       if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); extra.pro = overlay.querySelector('#ent-pro').value; }
       if(showParentLabel){
         extra.isMajor = overlay.querySelector('#ent-ismajor').checked;
