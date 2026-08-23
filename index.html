@@ -430,13 +430,14 @@
       if(l) e.labelId = l.id;
     }
     if(!e.labelId) e.labelId = '';
-    // migrate old songwriters string array -> writerCredits [{writerId, publisherId}]
+    // migrate old songwriters string array -> writerCredits [{writerId, publisherId, role}]
     if(!e.writerCredits){
       e.writerCredits = (e.songwriters||[]).map(function(name){
         const w = findOrCreateEntity('writer', name);
-        return w ? { writerId: w.id, publisherId: '' } : null;
+        return w ? { writerId: w.id, publisherId: '', role: 'Songwriter' } : null;
       }).filter(Boolean);
     }
+    e.writerCredits.forEach(function(c){ if(!c.role) c.role = 'Songwriter'; });
     return e;
   }
 
@@ -734,7 +735,8 @@
       const w = findEntityById('writer', c.writerId);
       const p = findEntityById('publisher', c.publisherId);
       if(!w) return '';
-      return '<button class="chip" data-entity-type="writer" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+'</button>' +
+      const role = c.role || 'Songwriter';
+      return '<button class="chip" data-entity-type="writer" data-entity-id="'+esc(c.writerId)+'">'+esc(w.name)+' <span class="admin-through">('+esc(role)+')</span></button>' +
         (p ? '<button class="chip chip-pub" data-entity-type="publisher" data-entity-id="'+esc(c.publisherId)+'">'+esc(p.name)+'</button>' : '');
     }).join('');
     return '' +
@@ -750,7 +752,7 @@
       (e.isrc ? '<div class="publisher">ISRC: ' + esc(e.isrc) + '</div>' : '') +
       '<div class="stars">' + starsHtml(e.rating) + '</div>' +
       '<hr class="divider">' +
-      '<div class="writers-label">Written by</div>' +
+      '<div class="writers-label">Credits</div>' +
       '<div class="chip-row">' + (credits || '<span class="writers-label" style="font-style:italic;">not logged</span>') + '</div>' +
       ((e.tags||[]).length ? '<div class="chip-row">' + e.tags.map(function(t){ return '<button class="chip chip-tag" data-tag="'+esc(t)+'">'+esc(t)+'</button>'; }).join('') + '</div>' : '') +
       '<div class="' + (e.thoughts ? 'thoughts' : 'thoughts empty-thought') + '">' + (e.thoughts ? esc(e.thoughts) : 'No notes yet.') + '</div>' +
@@ -1346,8 +1348,8 @@
   function buildShareText(e){
     const lines = [];
     lines.push(e.song + (artistName(e) ? ' \u2014 ' + artistName(e) : ''));
-    const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + (p ? ' ('+p.name+')' : ''); }).filter(Boolean);
-    if(credits.length) lines.push('Written by: ' + credits.join(', '));
+    const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + ' ['+(c.role||'Songwriter')+']' + (p ? ' ('+p.name+')' : ''); }).filter(Boolean);
+    if(credits.length) lines.push('Credits: ' + credits.join(', '));
     if(labelName(e)) lines.push('Label: ' + labelName(e));
     if(e.rating) lines.push('Rating: ' + starsHtml(e.rating));
     if((e.tags||[]).length) lines.push('Tags: ' + e.tags.join(', '));
@@ -1371,10 +1373,10 @@
 
   function csvEscape(s){ s = String(s==null?'':s); if(/[",\n]/.test(s)){ s = '"' + s.replace(/"/g,'""') + '"'; } return s; }
   function exportCsv(){
-    const headers = ['Song','Artist','Album','Label','ISRC','Songwriter Credits','Tags','Rating','Priority','Revisit','Thoughts','Streams/Status','Spotify Link','YouTube Link','Date Added'];
+    const headers = ['Song','Artist','Album','Label','ISRC','Credits','Tags','Rating','Priority','Revisit','Thoughts','Streams/Status','Spotify Link','YouTube Link','Date Added'];
     const rows = entries.slice().sort(function(a,b){ return b.createdAt-a.createdAt; }).map(function(e){
       const alb = findAlbum(e.albumId);
-      const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + (p ? ' ('+p.name+')' : ''); }).filter(Boolean).join('; ');
+      const credits = (e.writerCredits||[]).map(function(c){ const w=findEntityById('writer',c.writerId); const p=findEntityById('publisher',c.publisherId); if(!w) return ''; return w.name + ' ['+(c.role||'Songwriter')+']' + (p ? ' ('+p.name+')' : ''); }).filter(Boolean).join('; ');
       return [
         e.song, artistName(e), alb?alb.title:'', labelName(e), e.isrc, credits, (e.tags||[]).join('; '),
         e.rating||0, e.priority?'Yes':'No', e.revisit?'Yes':'No', e.thoughts, e.streamNote,
@@ -1416,12 +1418,15 @@
     if(!text) return [];
     return text.split(';').map(function(piece){
       piece = piece.trim(); if(!piece) return null;
+      let role = '';
+      const roleMatch = piece.match(/\[([^\]]+)\]/);
+      if(roleMatch){ role = roleMatch[1].trim(); piece = piece.replace(roleMatch[0],'').trim(); }
       const m = piece.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
       const writerName = m ? m[1].trim() : piece;
       const pubName = m ? m[2].trim() : '';
       const w = findOrCreateEntity('writer', writerName);
       const p = pubName ? findOrCreateEntity('publisher', pubName) : null;
-      return w ? { writerId: w.id, publisherId: p ? p.id : '' } : null;
+      return w ? { writerId: w.id, publisherId: p ? p.id : '', role: role || 'Songwriter' } : null;
     }).filter(Boolean);
   }
   async function importCsv(file){
@@ -1431,7 +1436,7 @@
     const headers = rows[0].map(function(h){ return h.trim().toLowerCase(); });
     const idx = function(name){ return headers.indexOf(name.toLowerCase()); };
     const iSong=idx('Song'), iArtist=idx('Artist'), iAlbum=idx('Album'), iLabel=idx('Label'), iIsrc=idx('ISRC'),
-      iCredits=idx('Songwriter Credits'), iOldWriters=idx('Songwriters'), iTags=idx('Tags'), iRating=idx('Rating'),
+      iCredits=idx('Credits')>-1?idx('Credits'):idx('Songwriter Credits'), iOldWriters=idx('Songwriters'), iTags=idx('Tags'), iRating=idx('Rating'),
       iPriority=idx('Priority'), iRevisit=idx('Revisit'), iThoughts=idx('Thoughts'),
       iStream=idx('Streams/Status'), iSpotify=idx('Spotify Link'), iYoutube=idx('YouTube Link'), iPub=idx('Publisher');
     if(iSong === -1){ toast('Couldn\u2019t find a "Song" column — is this a SongCard export?'); return; }
@@ -1460,7 +1465,7 @@
       let writerCredits = [];
       if(iCredits>-1 && row[iCredits]){ writerCredits = parseCreditsField(row[iCredits]); }
       else if(iOldWriters>-1 && row[iOldWriters]){
-        writerCredits = row[iOldWriters].split(';').map(function(n){ const w=findOrCreateEntity('writer',n.trim()); return w?{writerId:w.id,publisherId:''}:null; }).filter(Boolean);
+        writerCredits = row[iOldWriters].split(';').map(function(n){ const w=findOrCreateEntity('writer',n.trim()); return w?{writerId:w.id,publisherId:'',role:'Songwriter'}:null; }).filter(Boolean);
       }
 
       entries.push({
@@ -1491,14 +1496,21 @@
     return '<datalist id="'+id+'">'+opts+'</datalist>';
   }
 
-  function addCreditRow(overlay, writerVal, publisherVal){
+  function knownRoles(){
+    const seeds = ['Songwriter','Producer','Co-Producer','Executive Producer','Mixing Engineer','Mastering Engineer','Vocal Producer','Engineer','Additional Vocals','Featured Artist'];
+    const used = new Set(seeds);
+    entries.forEach(function(e){ (e.writerCredits||[]).forEach(function(c){ if(c.role) used.add(c.role); }); });
+    return Array.from(used);
+  }
+  function addCreditRow(overlay, writerVal, publisherVal, roleVal){
     const wrap = overlay.querySelector('#creditRows');
     const row = document.createElement('div');
     row.className = 'credit-row';
     row.innerHTML =
-      '<input type="text" class="credit-writer" list="writerNamesList" placeholder="Songwriter name" value="'+esc(writerVal||'')+'">' +
-      '<input type="text" class="credit-publisher" list="publisherNamesList" placeholder="Their publisher (optional)" value="'+esc(publisherVal||'')+'">' +
-      '<button type="button" class="credit-remove" aria-label="Remove this songwriter">\u00d7</button>';
+      '<input type="text" class="credit-writer" list="writerNamesList" placeholder="Name" value="'+esc(writerVal||'')+'">' +
+      '<input type="text" class="credit-role" list="creditRoleList" placeholder="Role" value="'+esc(roleVal||'Songwriter')+'" style="max-width:150px;">' +
+      '<input type="text" class="credit-publisher" list="publisherNamesList" placeholder="Publisher (if songwriter)" value="'+esc(publisherVal||'')+'">' +
+      '<button type="button" class="credit-remove" aria-label="Remove this credit">\u00d7</button>';
     row.querySelector('.credit-remove').addEventListener('click', function(){ row.remove(); });
     wrap.appendChild(row);
   }
@@ -1517,6 +1529,7 @@
           '<div class="field"><label>Label</label><input id="f-label" type="text" list="labelNamesList" value="' + (e?esc(labelName(e)):'') + '" placeholder="Record label"></div>' +
         '</div>' +
         buildDatalist('artistNamesList','artist') + buildDatalist('labelNamesList','label') + buildDatalist('writerNamesList','writer') + buildDatalist('publisherNamesList','publisher') +
+        '<datalist id="creditRoleList">' + knownRoles().map(function(r){ return '<option value="'+esc(r)+'">'; }).join('') + '</datalist>' +
         '<div class="lookup-box">' +
           '<div class="lookup-title">Auto-fill from MusicBrainz (optional)</div>' +
           '<div class="lookup-row"><button type="button" class="lookup-btn" id="lookupTitleBtn">Fill from title + artist above</button></div>' +
@@ -1524,10 +1537,10 @@
           '<div class="lookup-status" id="lookupStatus">Fills song, artist, writers, label, and ISRC where the source has them. Publishers aren\u2019t covered by MusicBrainz — add those per writer below, or check BMI Songview.</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>Songwriter(s) &amp; their publisher</label>' +
+          '<label>Credits (writers, producers, engineers, etc.)</label>' +
           '<div id="creditRows"></div>' +
-          '<button type="button" class="add-credit-btn" id="addCreditBtn">+ Add songwriter</button>' +
-          '<div class="hint">Each songwriter can have a different publisher on the same song \u2014 leave publisher blank if you don\u2019t know it yet.</div>' +
+          '<button type="button" class="add-credit-btn" id="addCreditBtn">+ Add a credit</button>' +
+          '<div class="hint">Set the role for each person \u2014 Songwriter, Producer, Mixing Engineer, whatever fits. Publisher only matters for Songwriter credits.</div>' +
         '</div>' +
         '<div class="field"><label>Album (optional)</label><select id="f-album">' +
           '<option value="">\u2014 No album \u2014</option>' +
@@ -1564,12 +1577,12 @@
     if(e && e.writerCredits && e.writerCredits.length){
       e.writerCredits.forEach(function(c){
         const w = findEntityById('writer', c.writerId); const p = findEntityById('publisher', c.publisherId);
-        addCreditRow(overlay, w?w.name:'', p?p.name:'');
+        addCreditRow(overlay, w?w.name:'', p?p.name:'', c.role||'Songwriter');
       });
     } else {
-      addCreditRow(overlay, '', '');
+      addCreditRow(overlay, '', '', 'Songwriter');
     }
-    overlay.querySelector('#addCreditBtn').addEventListener('click', function(){ addCreditRow(overlay, '', ''); });
+    overlay.querySelector('#addCreditBtn').addEventListener('click', function(){ addCreditRow(overlay, '', '', 'Songwriter'); });
 
     let rating = e ? (e.rating||0) : 0;
     const starPicker = overlay.querySelector('#starPicker');
@@ -1634,11 +1647,12 @@
       const writerCredits = [];
       overlay.querySelectorAll('.credit-row').forEach(function(row){
         const wName = row.querySelector('.credit-writer').value.trim();
+        const roleName = row.querySelector('.credit-role').value.trim() || 'Songwriter';
         const pName = row.querySelector('.credit-publisher').value.trim();
         if(!wName) return;
         const w = findOrCreateEntity('writer', wName);
-        const p = pName ? findOrCreateEntity('publisher', pName) : null;
-        if(w) writerCredits.push({ writerId: w.id, publisherId: p ? p.id : '' });
+        const p = (pName && roleName.toLowerCase()==='songwriter') ? findOrCreateEntity('publisher', pName) : null;
+        if(w) writerCredits.push({ writerId: w.id, publisherId: p ? p.id : '', role: roleName });
       });
 
       let albumId = albumSelect.value;
