@@ -1177,6 +1177,7 @@
     else if(view==='tags' || view==='tagFilter'){ browseVal = 'tags'; }
     else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
     else if(view==='notes'){ browseVal = 'notes'; }
+    else if(view==='inbox'){ browseVal = 'inbox'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
     const inboxOpt = document.getElementById('inboxOption');
@@ -1194,6 +1195,7 @@
     if(view === 'albums'){ renderAlbums(); return; }
     if(view === 'albumFilter'){ renderAlbumFilter(q); return; }
     if(view === 'notes'){ renderNotes(); return; }
+    if(view === 'inbox'){ renderInbox(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -2623,6 +2625,7 @@
     else if(v==='tags'){ view='tags'; }
     else if(v==='albums'){ view='albums'; }
     else if(v==='notes'){ view='notes'; }
+    else if(v==='inbox'){ view='inbox'; }
     else if(v==='stats'){ view='stats'; }
     else { return; }
     render();
