@@ -53,6 +53,11 @@
   .tagline{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.08em; color:var(--ink-soft); text-transform:uppercase;}
   .stats-row{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-top:8px; letter-spacing:0.03em;}
   .controls{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 20px 10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .capture-bar{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 20px 14px; display:flex; gap:10px;}
+  .capture-bar input{flex:1; padding:13px 16px; border:2px solid var(--stamp); border-radius:var(--radius); background:var(--card); font-family:'Inter',sans-serif; font-size:14px; color:var(--ink);}
+  .capture-bar input:focus{outline:none; box-shadow:0 0 0 3px rgba(161,59,46,0.15);}
+  .capture-bar .btn-add{margin-left:0;}
+  @media (max-width:520px){ .capture-bar{flex-direction:column;} }
   .search-wrap{flex:1 1 220px; position:relative;}
   .search-wrap input{width:100%; padding:11px 14px 11px 34px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);}
   .search-wrap input:focus{outline:2px solid var(--teal); outline-offset:1px;}
@@ -184,6 +189,11 @@
   <div class="stats-row" id="statsRow">Loading catalog…</div>
 </header>
 
+<div class="capture-bar">
+  <input id="captureInput" type="text" placeholder="Song, artist, person, thought, Spotify link, company…">
+  <button class="btn-add" id="captureBtn" type="button">Capture</button>
+</div>
+
 <div class="controls">
   <div class="search-wrap">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -206,6 +216,7 @@
     <option value="tags">Tags</option>
     <option value="albums">Releases</option>
     <option value="notes">Notes</option>
+    <option value="inbox" id="inboxOption">Inbox</option>
     <option value="stats">Stats</option>
   </select>
   <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
@@ -283,6 +294,7 @@
   let legacyContacts = [];
   let affiliations = [];
   let notes = [];
+  let inboxItems = [];
   let loaded = false;
   let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
@@ -510,7 +522,16 @@
   }
   function findNote(id){ return notes.find(function(n){ return n.id===id; }) || null; }
   function findRelatable(type, id){
-    return type==='release' ? findAlbum(id) : findEntityById(type, id);
+    if(type==='release') return findAlbum(id);
+    if(type==='song'){
+      const s = entries.find(function(e){ return e.id===id; });
+      return s ? { id: s.id, name: s.song } : null;
+    }
+    if(type==='note'){
+      const nt = notes.find(function(x){ return x.id===id; });
+      return nt ? { id: nt.id, name: nt.title || nt.type } : null;
+    }
+    return findEntityById(type, id);
   }
   function notesForEntity(type, id){
     return notes.filter(function(n){ return (n.relatedEntities||[]).some(function(r){ return r.type===type && r.id===id; }); })
@@ -533,6 +554,164 @@
     }
     html += '</div>';
     return html;
+  }
+
+  // ===== Universal Inbox: capture first, organize later =====
+  const SPOTIFY_URL_RE = /open\.spotify\.com\/(track|album|artist|playlist)\//i;
+  function detectCaptureType(text){
+    const m = text.match(SPOTIFY_URL_RE);
+    if(m) return 'Spotify ' + m[1];
+    if(/^https?:\/\//i.test(text.trim())) return 'Link';
+    return null;
+  }
+  async function saveInbox(){
+    await syncNormalizedCollection('inbox', inboxItems);
+  }
+  function findInboxItem(id){ return inboxItems.find(function(i){ return i.id===id; }) || null; }
+  function unprocessedInboxCount(){ return inboxItems.filter(function(i){ return i.status==='unprocessed'; }).length; }
+  async function captureQuick(rawText){
+    rawText = rawText.trim();
+    if(!rawText) return;
+    const urlMatch = rawText.match(/https?:\/\/\S+/i);
+    const item = {
+      id: 'ib'+Date.now()+Math.random().toString(36).slice(2,7),
+      rawText: rawText,
+      url: urlMatch ? urlMatch[0] : '',
+      detectedType: detectCaptureType(rawText),
+      capturedAt: Date.now(),
+      status: 'unprocessed',
+      processedAsType: '',
+      processedIntoType: '',
+      processedIntoId: ''
+    };
+    inboxItems.push(item);
+    await saveInbox();
+    toast('Captured \u2014 process it later from the Inbox');
+    render();
+  }
+
+  function renderInbox(){
+    const unprocessed = inboxItems.filter(function(i){ return i.status==='unprocessed'; }).sort(function(a,b){ return b.capturedAt-a.capturedAt; });
+    const others = inboxItems.filter(function(i){ return i.status!=='unprocessed'; }).sort(function(a,b){ return b.capturedAt-a.capturedAt; });
+    let html = '<div class="filter-banner">' + unprocessed.length + ' item' + (unprocessed.length===1?'':'s') + ' to process</div>';
+    if(!inboxItems.length){
+      html += '<div class="empty"><strong>Your inbox is empty</strong>Drop anything into the Capture box above \u2014 a song, an artist, a thought, a link. Organize it later.</div>';
+      mainEl.innerHTML = html;
+      return;
+    }
+    function rowHtml(item){
+      const captured = new Date(item.capturedAt).toLocaleDateString();
+      let statusBadge = '';
+      if(item.status==='processed'){
+        const target = item.processedIntoId ? findRelatable(item.processedIntoType, item.processedIntoId) : null;
+        const needsDirectOpen = item.processedIntoType==='song' || item.processedIntoType==='note';
+        statusBadge = '<span class="admin-through">PROCESSED' + (item.processedAsType ? ' \u2192 ' + item.processedAsType.toUpperCase() : '') + '</span>' +
+          (target ? (needsDirectOpen
+            ? ' <button class="chip" data-open-'+item.processedIntoType+'="'+esc(item.processedIntoId)+'" style="margin-left:6px;">'+esc(target.name)+'</button>'
+            : ' <button class="chip" data-entity-type="'+item.processedIntoType+'" data-entity-id="'+esc(item.processedIntoId)+'" style="margin-left:6px;">'+esc(target.name||target.title)+'</button>')
+          : '');
+      } else if(item.status==='archived'){
+        statusBadge = '<span class="admin-through">ARCHIVED</span>';
+      }
+      return '<div class="writer-row" style="cursor:default;">' +
+        '<div class="writer-name" style="font-size:15px; flex:1; min-width:200px;">' + esc(item.rawText) + (item.detectedType ? ' <span class="admin-through">' + esc(item.detectedType.toUpperCase()) + '</span>' : '') + '</div>' +
+        '<div class="writer-count">' + captured + '</div>' +
+        '<div class="writer-songs">' + statusBadge + '</div>' +
+        (item.status==='unprocessed' ?
+          '<div class="writer-links">' +
+            '<button class="link-btn" data-process-inbox="'+esc(item.id)+'">Process \u2197</button>' +
+            '<button class="link-btn" data-archive-inbox="'+esc(item.id)+'">Archive</button>' +
+            '<button class="link-btn" data-delete-inbox="'+esc(item.id)+'">Delete</button>' +
+          '</div>' : '<div class="writer-links"><button class="link-btn" data-delete-inbox="'+esc(item.id)+'">Delete</button></div>') +
+      '</div>';
+    }
+    if(unprocessed.length){
+      html += '<div class="writer-index">' + unprocessed.map(rowHtml).join('') + '</div>';
+    }
+    if(others.length){
+      html += '<div class="stats-section"><h3>Processed &amp; archived</h3></div>';
+      html += '<div class="writer-index">' + others.map(rowHtml).join('') + '</div>';
+    }
+    mainEl.innerHTML = html;
+    mainEl.querySelectorAll('[data-process-inbox]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openProcessPicker(btn.getAttribute('data-process-inbox')); });
+    });
+    mainEl.querySelectorAll('[data-archive-inbox]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        const item = findInboxItem(btn.getAttribute('data-archive-inbox'));
+        if(item){ item.status = 'archived'; await saveInbox(); render(); }
+      });
+    });
+    mainEl.querySelectorAll('[data-delete-inbox]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        if(!confirm('Delete this inbox item?')) return;
+        inboxItems = inboxItems.filter(function(i){ return i.id!==btn.getAttribute('data-delete-inbox'); });
+        await saveInbox(); render();
+      });
+    });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+    mainEl.querySelectorAll('[data-open-song]').forEach(function(el){
+      el.addEventListener('click', function(){ openModal(el.getAttribute('data-open-song')); });
+    });
+    mainEl.querySelectorAll('[data-open-note]').forEach(function(el){
+      el.addEventListener('click', function(){ openNoteModal(el.getAttribute('data-open-note')); });
+    });
+  }
+
+  function openProcessPicker(itemId){
+    const item = findInboxItem(itemId);
+    if(!item) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const options = [
+      { type:'song', label:'Song' },
+      { type:'release', label:'Release' },
+      { type:'artist', label:'Artist' },
+      { type:'person', label:'Person' },
+      { type:'company', label:'Company' },
+      { type:'note', label:'Note' }
+    ];
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">' +
+        '<h2>Process this item</h2>' +
+        '<div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">"' + esc(item.rawText) + '"</div>' +
+        '<div class="field" style="display:flex; flex-direction:column; gap:8px;">' +
+          options.map(function(o){ return '<button class="btn btn-ghost" data-process-as="'+o.type+'" type="button" style="text-align:left;">' + o.label + '</button>'; }).join('') +
+        '</div>' +
+        '<div class="modal-actions"><button class="btn btn-ghost" id="ppCancelBtn" type="button">Cancel</button></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#ppCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    overlay.querySelectorAll('[data-process-as]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        const asType = btn.getAttribute('data-process-as');
+        overlay.remove();
+        markInboxProcessed(item, asType);
+        const isSpotify = SPOTIFY_URL_RE.test(item.rawText);
+        const onSaved = function(record){
+          item.processedIntoType = asType==='song' ? 'song' : asType;
+          item.processedIntoId = record.id;
+          saveInbox();
+        };
+        if(asType==='song') openModal(null, { song: isSpotify ? '' : item.rawText, spotifyLink: isSpotify ? item.url || item.rawText : '' }, onSaved);
+        else if(asType==='release') openAlbumModal(null, { title: item.rawText }, onSaved);
+        else if(asType==='note') openNoteModal(null, null, { text: item.rawText }, onSaved);
+        else openEntityModal(asType, null, { name: item.rawText }, onSaved);
+      });
+    });
+  }
+  async function markInboxProcessed(item, asType){
+    item.status = 'processed';
+    item.processedAsType = asType;
+    await saveInbox();
+    render();
   }
 
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
@@ -849,6 +1028,7 @@
     try{ const r = await storageGet(LEGACY_CONTACT_STORAGE_KEY); legacyContacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyContacts = []; }
     try{ affiliations = await DataStore.getAll('affiliations'); }catch(e){ console.error('Could not load affiliations', e); affiliations = []; }
     try{ notes = await DataStore.getAll('notes'); }catch(e){ console.error('Could not load notes', e); notes = []; }
+    try{ inboxItems = await DataStore.getAll('inbox'); }catch(e){ console.error('Could not load inbox', e); inboxItems = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
     const companiesChanged = migrateLabelsIntoCompanies();
@@ -999,6 +1179,8 @@
     else if(view==='notes'){ browseVal = 'notes'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
+    const inboxOpt = document.getElementById('inboxOption');
+    if(inboxOpt){ const uc = unprocessedInboxCount(); inboxOpt.textContent = uc ? 'Inbox (' + uc + ')' : 'Inbox'; }
     revisitToggle.classList.toggle('toggle-on', revisitOnly);
     priorityToggle.classList.toggle('toggle-on', priorityOnly);
     priorityToggle.classList.toggle('priority-on', priorityOnly);
@@ -1313,9 +1495,10 @@
     attachCardHandlers();
   }
 
-  function openEntityModal(type, id){
+  function openEntityModal(type, id, prefill, onSaved){
     const meta = ENTITY_META[type];
     const ent = id ? findEntityById(type, id) : null;
+    prefill = prefill || {};
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     const showIpi = (type==='person' || type==='company');
@@ -1374,7 +1557,7 @@
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (ent ? 'Edit ' + meta.label.toLowerCase() : 'New ' + meta.label.toLowerCase()) + '</h2>' +
-        '<div class="field"><label>Name</label><input id="ent-name" type="text" value="' + (ent?esc(ent.name):'') + '" placeholder="' + meta.label + ' name"></div>' +
+        '<div class="field"><label>Name</label><input id="ent-name" type="text" value="' + (ent?esc(ent.name):esc(prefill.name||'')) + '" placeholder="' + meta.label + ' name"></div>' +
         '<div class="field"><label>Photo URL (optional)</label><input id="ent-photo" type="text" value="' + (ent?esc(ent.photoUrl||''):'') + '" placeholder="Paste an image link"><div class="hint">Right-click any image online and \u201cCopy image address,\u201d then paste it here.</div></div>' +
         extraFields +
         '<div class="field"><label>About / notes</label><textarea id="ent-notes" placeholder="Bio, background, anything worth remembering\u2026" style="min-height:120px;">' + (ent?esc(ent.notes||''):'') + '</textarea></div>' +
@@ -1428,11 +1611,13 @@
         }
         extra.managerPersonId = mgrId;
       }
+      let resultEnt = ent;
       if(ent){ Object.assign(ent, {name, notes}, extra); }
-      else { entityArray(type).push(Object.assign({ id: type.slice(0,2)+Date.now()+Math.random().toString(36).slice(2,7), name: name, notes: notes }, extra)); }
+      else { resultEnt = Object.assign({ id: type.slice(0,2)+Date.now()+Math.random().toString(36).slice(2,7), name: name, notes: notes }, extra); entityArray(type).push(resultEnt); }
       overlay.remove();
       if(peopleChangedNow){ await saveEntityArray('person'); }
       await saveEntityArray(type);
+      if(onSaved) onSaved(resultEnt);
       toast(ent ? meta.label+' updated' : meta.label+' created');
       render();
     });
@@ -1565,15 +1750,16 @@
     });
     attachCardHandlers();
   }
-  function openAlbumModal(id){
+  function openAlbumModal(id, prefill, onSaved){
     const a = id ? findAlbum(id) : null;
+    prefill = prefill || {};
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     const releaseTypes = ['Album','EP','Single','Mixtape','Soundtrack','Compilation','Other'];
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (a ? 'Edit release' : 'New release') + '</h2>' +
-        '<div class="field"><label>Title</label><input id="al-title" type="text" value="' + (a?esc(a.title):'') + '" placeholder="e.g. Late Bloom"></div>' +
+        '<div class="field"><label>Title</label><input id="al-title" type="text" value="' + (a?esc(a.title):esc(prefill.title||'')) + '" placeholder="e.g. Late Bloom"></div>' +
         '<div class="field"><label>Photo / artwork URL (optional)</label><input id="al-photo" type="text" value="' + (a?esc(a.photoUrl||''):'') + '" placeholder="Paste an image link"></div>' +
         '<div class="field-row">' +
           '<div class="field"><label>Artist</label><input id="al-artist" type="text" list="releaseArtistNamesList" value="' + (a?esc(releaseArtistName(a)):'') + '" placeholder="Who released it"></div>' +
@@ -1604,10 +1790,12 @@
       if(!title){ toast('Give the release a title first'); return; }
       const artistId = artistTxt ? (findOrCreateEntity('artist', artistTxt) || {}).id || '' : '';
       const labelId = labelTxt ? (findOrCreateEntity('company', labelTxt) || {}).id || '' : '';
+      let resultAlbum = a;
       if(a){ Object.assign(a, {title, artistId, labelId, releaseType, releaseDate, photoUrl, notes}); }
-      else{ albums.push({ id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title, artistId, labelId, releaseType, releaseDate, photoUrl, notes }); }
+      else{ resultAlbum = { id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7), title, artistId, labelId, releaseType, releaseDate, photoUrl, notes }; albums.push(resultAlbum); }
       overlay.remove();
       await saveEntityArray('artist'); await saveEntityArray('company'); await saveAlbums();
+      if(onSaved) onSaved(resultAlbum);
       toast(a ? 'Release updated' : 'Release created'); render();
     });
     setTimeout(function(){ overlay.querySelector('#al-title').focus(); }, 30);
@@ -1700,8 +1888,9 @@
     });
   }
 
-  function openNoteModal(id, presetRelated){
+  function openNoteModal(id, presetRelated, prefill, onSaved){
     const n = id ? findNote(id) : null;
+    prefill = prefill || {};
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = '' +
@@ -1711,7 +1900,7 @@
           '<div class="field"><label>Title (optional)</label><input id="nt-title" type="text" value="' + (n?esc(n.title||''):'') + '" placeholder="Short label"></div>' +
           '<div class="field"><label>Type</label><select id="nt-type">' + NOTE_TYPES.map(function(t){ return '<option value="'+t+'"'+((n?n.type:'Quick thought')===t?' selected':'')+'>'+t+'</option>'; }).join('') + '</select></div>' +
         '</div>' +
-        '<div class="field"><label>Note</label><textarea id="nt-text" style="min-height:100px;" placeholder="What you observed, thought, or want to remember\u2026">' + (n?esc(n.text||''):'') + '</textarea></div>' +
+        '<div class="field"><label>Note</label><textarea id="nt-text" style="min-height:100px;" placeholder="What you observed, thought, or want to remember\u2026">' + (n?esc(n.text||''):esc(prefill.text||'')) + '</textarea></div>' +
         '<div class="field"><label>Tags (optional)</label><input id="nt-tags" type="text" value="' + (n?esc((n.tags||[]).join(', ')):'') + '" placeholder="comma separated"></div>' +
         '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="nt-pinned" style="width:auto;"' + (n&&n.pinned?' checked':'') + '> Pin to top</label></div>' +
         '<div class="field"><label>Related to</label><div id="relatedChips" class="chip-row" style="margin-bottom:8px;"></div>' +
@@ -1781,13 +1970,16 @@
       const pinned = overlay.querySelector('#nt-pinned').checked;
       if(!text){ toast('Write something in the note first'); return; }
       const tags = tagsRaw ? tagsRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      let resultNote = n;
       if(n){
         Object.assign(n, {title, type, text, tags, pinned, relatedEntities: relatedList});
       } else {
-        notes.push({ id: 'nt'+Date.now()+Math.random().toString(36).slice(2,7), title, type, text, tags, pinned, relatedEntities: relatedList, createdAt: Date.now() });
+        resultNote = { id: 'nt'+Date.now()+Math.random().toString(36).slice(2,7), title, type, text, tags, pinned, relatedEntities: relatedList, createdAt: Date.now() };
+        notes.push(resultNote);
       }
       overlay.remove();
       await saveNotes();
+      if(onSaved) onSaved(resultNote);
       toast(n ? 'Note updated' : 'Note added');
       render();
     });
@@ -2087,7 +2279,8 @@
       people: people,
       companies: companies,
       affiliations: affiliations,
-      notes: notes
+      notes: notes,
+      inboxItems: inboxItems
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -2120,7 +2313,7 @@
     const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
     const restoredCompanies = data.companies || data.publishers || [];
     const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length;
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length + ', Inbox items: ' + (data.inboxItems||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
@@ -2131,6 +2324,7 @@
     legacyLabels = restoredLegacyLabels;
     affiliations = data.affiliations || [];
     notes = data.notes || [];
+    inboxItems = data.inboxItems || [];
     entries.forEach(normalize);
     migrateContactsIntoPeople();
     migrateLabelsIntoCompanies();
@@ -2141,6 +2335,7 @@
     await saveEntityArray('company');
     await saveAffiliations();
     await saveNotes();
+    await saveInbox();
     toast('Backup restored');
     view = 'songs'; render();
   }
@@ -2231,15 +2426,16 @@
     wrap.appendChild(row);
   }
 
-  function openModal(id){
+  function openModal(id, prefill, onSaved){
     const e = id ? entries.find(function(x){ return x.id===id; }) : null;
+    prefill = prefill || {};
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (e ? 'Edit card' : 'New card') + '</h2>' +
         '<div class="sub">' + (e ? 'Update this song\u2019s entry' : 'Log a song, its writers, and your take') + '</div>' +
-        '<div class="field"><label>Song title</label><input id="f-song" type="text" value="' + (e?esc(e.song):'') + '" placeholder="e.g. Slow Static"></div>' +
+        '<div class="field"><label>Song title</label><input id="f-song" type="text" value="' + (e?esc(e.song):esc(prefill.song||'')) + '" placeholder="e.g. Slow Static"></div>' +
         '<div class="field-row">' +
           '<div class="field"><label>Artist</label><input id="f-artist" type="text" list="artistNamesList" value="' + (e?esc(artistName(e)):'') + '" placeholder="Who released it"></div>' +
           '<div class="field"><label>Label</label><input id="f-label" type="text" list="labelNamesList" value="' + (e?esc(labelName(e)):'') + '" placeholder="Record label"></div>' +
@@ -2274,7 +2470,7 @@
         '<div class="field"><label>Your rating</label><div class="star-picker" id="starPicker"></div></div>' +
         '<div class="field"><label>Your thoughts</label><textarea id="f-thoughts" placeholder="What stood out…">' + (e?esc(e.thoughts):'') + '</textarea></div>' +
         '<div class="field-row">' +
-          '<div class="field"><label>Spotify link (optional)</label><div class="lookup-row"><input id="f-spotify" type="text" value="' + (e?esc(e.spotifyLink||''):'') + '" placeholder="Paste track URL"><button type="button" class="lookup-btn" id="lookupSpotifyBtn">Auto-fill everything</button></div></div>' +
+          '<div class="field"><label>Spotify link (optional)</label><div class="lookup-row"><input id="f-spotify" type="text" value="' + (e?esc(e.spotifyLink||''):esc(prefill.spotifyLink||'')) + '" placeholder="Paste track URL"><button type="button" class="lookup-btn" id="lookupSpotifyBtn">Auto-fill everything</button></div></div>' +
           '<div class="field"><label>YouTube link (optional)</label><input id="f-youtube" type="text" value="' + (e?esc(e.youtubeLink||''):'') + '" placeholder="Paste video URL"></div>' +
         '</div>' +
         '<div class="field"><label>Streams / status (optional)</label><input id="f-stream" type="text" value="' + (e?esc(e.streamNote||''):'') + '" placeholder="e.g. 40k on Spotify"></div>' +
@@ -2383,19 +2579,22 @@
         albums.push(newAlbum); albumId = newAlbum.id; albumsChanged = true;
       }
 
+      let resultEntry = e;
       if(e){
         Object.assign(e, {song, artistId, labelId, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId, writerCredits});
       } else {
-        entries.push({
+        resultEntry = {
           id: 'e'+Date.now()+Math.random().toString(36).slice(2,7),
           song, artistId, labelId, tags, thoughts, streamNote, spotifyLink, youtubeLink, rating, revisit, priority, isrc, albumId, writerCredits,
           createdAt: Date.now()
-        });
+        };
+        entries.push(resultEntry);
       }
       overlay.remove();
       if(albumsChanged){ await saveAlbums(); }
       await saveEntityArray('artist'); await saveEntityArray('person'); await saveEntityArray('company');
       await saveEntries();
+      if(onSaved) onSaved(resultEntry);
       toast(e ? 'Card updated' : 'Card added');
       render();
     });
@@ -2404,6 +2603,17 @@
   }
 
   document.getElementById('openAdd').addEventListener('click', function(){ openModal(null); });
+  document.getElementById('captureBtn').addEventListener('click', function(){
+    const input = document.getElementById('captureInput');
+    captureQuick(input.value);
+    input.value = '';
+  });
+  document.getElementById('captureInput').addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter'){
+      captureQuick(this.value);
+      this.value = '';
+    }
+  });
   tabSongs.addEventListener('click', function(){ view='songs'; render(); });
   browseSelect.addEventListener('change', function(){
     const v = browseSelect.value;
