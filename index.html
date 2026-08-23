@@ -280,6 +280,7 @@
   let companies = [];
   let legacyLabels = [];
   let legacyContacts = [];
+  let affiliations = [];
   let loaded = false;
   let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
@@ -472,6 +473,32 @@
       entityArray(type).push(e);
     }
     return e;
+  }
+
+  // ===== Affiliations: a person/artist's relationship history with a company, with dates =====
+  async function saveAffiliations(){
+    await syncNormalizedCollection('affiliations', affiliations);
+  }
+  function findAffiliation(id){ return affiliations.find(function(a){ return a.id===id; }) || null; }
+  function affiliationsForSubject(subjectType, subjectId){
+    return affiliations.filter(function(a){ return a.subjectType===subjectType && a.subjectId===subjectId; })
+      .sort(function(a,b){
+        if(!a.endDate && b.endDate) return -1;
+        if(a.endDate && !b.endDate) return 1;
+        return (b.startDate||'').localeCompare(a.startDate||'');
+      });
+  }
+  function affiliationsForCompany(companyId){
+    return affiliations.filter(function(a){ return a.companyId===companyId; })
+      .sort(function(a,b){
+        if(!a.endDate && b.endDate) return -1;
+        if(a.endDate && !b.endDate) return 1;
+        return (b.startDate||'').localeCompare(a.startDate||'');
+      });
+  }
+  function affiliationDateRange(a){
+    if(!a.startDate && !a.endDate) return 'Current';
+    return (a.startDate || '?') + '\u2013' + (a.endDate || 'present');
   }
 
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
@@ -786,6 +813,7 @@
     }, 'companies');
     try{ const r = await storageGet(LEGACY_LABEL_STORAGE_KEY); legacyLabels = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyLabels = []; }
     try{ const r = await storageGet(LEGACY_CONTACT_STORAGE_KEY); legacyContacts = r && r.value ? JSON.parse(r.value) : []; }catch(e){ legacyContacts = []; }
+    try{ affiliations = await DataStore.getAll('affiliations'); }catch(e){ console.error('Could not load affiliations', e); affiliations = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
     const companiesChanged = migrateLabelsIntoCompanies();
@@ -1123,6 +1151,40 @@
       '</div>' + // close flex:1 name/details wrapper
       '</div>' + // close entity-header
     '</div>';
+    if((type==='person' || type==='artist')){
+      const subjAffiliations = affiliationsForSubject(type, id);
+      html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Affiliations</div><button class="icon-btn" id="addAffiliationBtn" type="button">+ add</button></div>';
+      if(subjAffiliations.length){
+        html += '<div class="writer-index" style="margin-top:4px;">' + subjAffiliations.map(function(a){
+          const co = findEntityById('company', a.companyId);
+          return '<div class="writer-row" data-edit-affiliation="'+esc(a.id)+'" style="cursor:pointer;">' +
+            '<div class="writer-name" style="font-size:15px;">' + (co ? esc(co.name) : '(missing company)') + (!a.endDate ? ' <span class="admin-through">CURRENT</span>' : '') + '</div>' +
+            '<div class="writer-count">' + esc(affiliationDateRange(a)) + '</div>' +
+            '<div class="writer-songs">' + esc(a.role||'') + (a.territory ? ' \u00b7 ' + esc(a.territory) : '') + '</div>' +
+          '</div>';
+        }).join('') + '</div>';
+      } else {
+        html += '<div class="writers-label" style="font-style:italic; margin-top:6px;">No affiliations logged yet.</div>';
+      }
+      html += '</div>';
+    }
+    if(type==='company'){
+      const coAffiliations = affiliationsForCompany(id);
+      if(coAffiliations.length){
+        html += '<div class="stat-tile" style="margin-bottom:18px;">' +
+          '<div class="writers-label">People &amp; artists affiliated</div>' +
+          '<div class="writer-index" style="margin-top:4px;">' + coAffiliations.map(function(a){
+            const subj = findEntityById(a.subjectType, a.subjectId);
+            return '<div class="writer-row" data-entity-type="'+a.subjectType+'" data-entity-id="'+esc(a.subjectId)+'">' +
+              '<div class="writer-name" style="font-size:15px;">' + (subj ? esc(subj.name) : '(missing)') + (!a.endDate ? ' <span class="admin-through">CURRENT</span>' : '') + '</div>' +
+              '<div class="writer-count">' + esc(affiliationDateRange(a)) + '</div>' +
+              '<div class="writer-songs">' + esc(a.role||'') + '</div>' +
+            '</div>';
+          }).join('') + '</div>' +
+        '</div>';
+      }
+    }
     if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
       const seen = new Set();
       const writerAdminEntries = [];
@@ -1156,6 +1218,12 @@
     mainEl.innerHTML = html;
     document.getElementById('backToEntity').addEventListener('click', function(){ view='entityIndex'; entityIndexType=type; render(); });
     document.getElementById('editEntityBtn').addEventListener('click', function(){ openEntityModal(type, id); });
+    if(document.getElementById('addAffiliationBtn')){
+      document.getElementById('addAffiliationBtn').addEventListener('click', function(){ openAffiliationModal(null, type, id, null); });
+    }
+    mainEl.querySelectorAll('[data-edit-affiliation]').forEach(function(row){
+      row.addEventListener('click', function(){ openAffiliationModal(row.getAttribute('data-edit-affiliation')); });
+    });
     document.getElementById('deleteEntityBtn').addEventListener('click', async function(){
       if(!confirm('Delete "' + ent.name + '"? Songs stay, they just lose this credit.')) return;
       const arr = entityArray(type);
@@ -1172,6 +1240,11 @@
       if(type==='person'){
         artists.forEach(function(a){ if(a.managerPersonId===id) a.managerPersonId=''; });
         await saveEntityArray('artist');
+      }
+      const orphanedAffiliations = affiliations.filter(function(a){ return (a.subjectType===type && a.subjectId===id) || (type==='company' && a.companyId===id); });
+      if(orphanedAffiliations.length){
+        affiliations = affiliations.filter(function(a){ return orphanedAffiliations.indexOf(a)===-1; });
+        await saveAffiliations();
       }
       await saveEntityArray(type);
       await saveEntries();
@@ -1475,6 +1548,93 @@
     setTimeout(function(){ overlay.querySelector('#al-title').focus(); }, 30);
   }
 
+  function openAffiliationModal(id, presetSubjectType, presetSubjectId, presetCompanyId){
+    const a = id ? findAffiliation(id) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const subjectType = a ? a.subjectType : (presetSubjectType || 'person');
+    const lockSubject = !!(presetSubjectType && presetSubjectId) || !!a;
+    const lockCompany = !!presetCompanyId && !a;
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (a ? 'Edit affiliation' : 'New affiliation') + '</h2>' +
+        (lockSubject ? '' :
+          '<div class="field"><label>Who</label><div style="display:flex; gap:16px; margin-bottom:8px;">' +
+            ['person','artist'].map(function(t){ return '<label style="display:flex; align-items:center; gap:6px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="radio" name="aff-subject-type" value="'+t+'" style="width:auto;"'+(subjectType===t?' checked':'')+'> '+(t==='person'?'Person':'Artist')+'</label>'; }).join('') +
+          '</div><select id="aff-subject-id"></select></div>'
+        ) +
+        (lockCompany ? '' :
+          '<div class="field"><label>Company</label><select id="aff-company-id"><option value="">\u2014 Select \u2014</option>' +
+            companies.slice().sort(function(x,y){return x.name.localeCompare(y.name);}).map(function(c){ return '<option value="'+esc(c.id)+'"'+(a&&a.companyId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'; }).join('') +
+          '</select></div>'
+        ) +
+        '<div class="field"><label>Role</label><input id="aff-role" type="text" value="' + (a?esc(a.role||''):'') + '" placeholder="e.g. A&amp;R, Manager, Recording agreement"></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Start date (optional)</label><input id="aff-start" type="text" value="' + (a?esc(a.startDate||''):'') + '" placeholder="e.g. 2023 or Jan 2023"></div>' +
+          '<div class="field"><label>End date (optional)</label><input id="aff-end" type="text" value="' + (a?esc(a.endDate||''):'') + '" placeholder="Leave blank if current"></div>' +
+        '</div>' +
+        '<div class="field"><label>Territory (optional)</label><input id="aff-territory" type="text" value="' + (a?esc(a.territory||''):'') + '" placeholder="e.g. US only"></div>' +
+        '<div class="field"><label>Source (optional)</label><input id="aff-source" type="text" value="' + (a?esc(a.source||''):'') + '" placeholder="e.g. LinkedIn, told me directly"></div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="aff-notes">' + (a?esc(a.notes||''):'') + '</textarea></div>' +
+        '<div class="modal-actions">' +
+          (a ? '<button class="btn btn-danger" id="affDeleteBtn" type="button">Delete</button>' : '') +
+          '<button class="btn btn-ghost" id="affCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="affSaveBtn" type="button">' + (a ? 'Save changes' : 'Add affiliation') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    function populateSubjectSelect(type, selectedId){
+      const sel = overlay.querySelector('#aff-subject-id');
+      if(!sel) return;
+      const pool = type==='person' ? people : artists;
+      sel.innerHTML = pool.slice().sort(function(x,y){return x.name.localeCompare(y.name);}).map(function(p){
+        return '<option value="'+esc(p.id)+'"'+(selectedId===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+      }).join('');
+    }
+    if(!lockSubject){
+      populateSubjectSelect(subjectType, a ? a.subjectId : null);
+      overlay.querySelectorAll('input[name="aff-subject-type"]').forEach(function(radio){
+        radio.addEventListener('change', function(){ populateSubjectSelect(radio.value, null); });
+      });
+    }
+
+    overlay.querySelector('#affCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(a){
+      overlay.querySelector('#affDeleteBtn').addEventListener('click', async function(){
+        if(!confirm('Delete this affiliation?')) return;
+        affiliations = affiliations.filter(function(x){ return x.id!==a.id; });
+        overlay.remove();
+        await saveAffiliations();
+        toast('Affiliation deleted');
+        render();
+      });
+    }
+    overlay.querySelector('#affSaveBtn').addEventListener('click', async function(){
+      const finalSubjectType = lockSubject ? (a ? a.subjectType : presetSubjectType) : overlay.querySelector('input[name="aff-subject-type"]:checked').value;
+      const finalSubjectId = lockSubject ? (a ? a.subjectId : presetSubjectId) : overlay.querySelector('#aff-subject-id').value;
+      const finalCompanyId = lockCompany ? presetCompanyId : overlay.querySelector('#aff-company-id').value;
+      if(!finalSubjectId){ toast('Pick who this affiliation is for'); return; }
+      if(!finalCompanyId){ toast('Pick a company'); return; }
+      const role = overlay.querySelector('#aff-role').value.trim();
+      const startDate = overlay.querySelector('#aff-start').value.trim();
+      const endDate = overlay.querySelector('#aff-end').value.trim();
+      const territory = overlay.querySelector('#aff-territory').value.trim();
+      const source = overlay.querySelector('#aff-source').value.trim();
+      const notes = overlay.querySelector('#aff-notes').value.trim();
+      if(a){
+        Object.assign(a, {companyId: finalCompanyId, role, startDate, endDate, territory, source, notes});
+      } else {
+        affiliations.push({ id: 'af'+Date.now()+Math.random().toString(36).slice(2,7), subjectType: finalSubjectType, subjectId: finalSubjectId, companyId: finalCompanyId, role, startDate, endDate, territory, source, notes });
+      }
+      overlay.remove();
+      await saveAffiliations();
+      toast(a ? 'Affiliation updated' : 'Affiliation added');
+      render();
+    });
+  }
+
   function renderStats(){
     const wMap = entityUsageMap('person'), aMap = entityUsageMap('artist'), cMap = entityUsageMap('company');
     const revisitCount = entries.filter(function(e){ return e.revisit; }).length;
@@ -1741,7 +1901,8 @@
       albums: albums,
       artists: artists,
       people: people,
-      companies: companies
+      companies: companies,
+      affiliations: affiliations
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -1774,7 +1935,7 @@
     const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
     const restoredCompanies = data.companies || data.publishers || [];
     const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length;
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
@@ -1783,6 +1944,7 @@
     companies = restoredCompanies;
     legacyContacts = restoredLegacyContacts;
     legacyLabels = restoredLegacyLabels;
+    affiliations = data.affiliations || [];
     entries.forEach(normalize);
     migrateContactsIntoPeople();
     migrateLabelsIntoCompanies();
@@ -1791,6 +1953,7 @@
     await saveEntityArray('artist');
     await saveEntityArray('person');
     await saveEntityArray('company');
+    await saveAffiliations();
     toast('Backup restored');
     view = 'songs'; render();
   }
