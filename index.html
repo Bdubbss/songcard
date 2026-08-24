@@ -217,6 +217,7 @@
     <option value="albums">Releases</option>
     <option value="notes">Notes</option>
     <option value="inbox" id="inboxOption">Inbox</option>
+    <option value="watchlist">Watchlist</option>
     <option value="stats">Stats</option>
   </select>
   <button class="tabbtn" id="bulkModeToggle" type="button">Select</button>
@@ -295,6 +296,7 @@
   let affiliations = [];
   let notes = [];
   let inboxItems = [];
+  let watchlistEntries = [];
   let loaded = false;
   let view = 'songs'; // songs | tags | tagFilter | albums | albumFilter | entityIndex | entityFilter | stats
   let tagFilter = null;
@@ -714,6 +716,36 @@
     render();
   }
 
+  // ===== Watchlist: A&R tracking layer on top of an Artist =====
+  const DISCOVERY_SOURCES = ['Spotify','TikTok','Instagram','YouTube','SoundCloud','Concert','Showcase','Friend','Industry recommendation','Playlist','Article','Producer/songwriter connection','Other'];
+  const CAREER_STAGES = ['Very early','Developing','Breaking','Established','Unknown'];
+  const SIGNED_STATUSES = ['Unsigned','Independent','Distribution deal','Label deal','Major label','Unknown'];
+  const REVIEW_FREQUENCIES = ['No schedule','Weekly','Monthly','Every 3 months','Every 6 months','Custom'];
+  async function saveWatchlist(){
+    await syncNormalizedCollection('watchlist', watchlistEntries);
+  }
+  function findWatchlistEntry(artistId){ return watchlistEntries.find(function(w){ return w.artistId===artistId; }) || null; }
+  function watchlistGrowth(entry){
+    const snaps = (entry.snapshots||[]).slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    if(snaps.length < 2) return null;
+    const metrics = ['spotifyMonthlyListeners','spotifyFollowers','instagramFollowers','tiktokFollowers','youtubeSubscribers'];
+    const metricLabels = { spotifyMonthlyListeners:'Spotify monthly listeners', spotifyFollowers:'Spotify followers', instagramFollowers:'Instagram followers', tiktokFollowers:'TikTok followers', youtubeSubscribers:'YouTube subscribers' };
+    for(const m of metrics){
+      const first = snaps[0][m], last = snaps[snaps.length-1][m];
+      if(first && last && !isNaN(parseFloat(first)) && !isNaN(parseFloat(last)) && parseFloat(first) > 0){
+        const pct = Math.round(((parseFloat(last)-parseFloat(first)) / parseFloat(first)) * 100);
+        return { label: metricLabels[m], first: first, last: last, pct: pct, firstDate: snaps[0].date, lastDate: snaps[snaps.length-1].date };
+      }
+    }
+    return null;
+  }
+
+  function bestSongForArtist(artistId){
+    const rated = entries.filter(function(e){ return e.artistId===artistId && (e.rating||0) > 0; });
+    if(!rated.length) return null;
+    return rated.sort(function(a,b){ return (b.rating||0)-(a.rating||0); })[0];
+  }
+
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
   function directChildIds(type, parentId){
     if(type!=='company') return [];
@@ -1029,6 +1061,7 @@
     try{ affiliations = await DataStore.getAll('affiliations'); }catch(e){ console.error('Could not load affiliations', e); affiliations = []; }
     try{ notes = await DataStore.getAll('notes'); }catch(e){ console.error('Could not load notes', e); notes = []; }
     try{ inboxItems = await DataStore.getAll('inbox'); }catch(e){ console.error('Could not load inbox', e); inboxItems = []; }
+    try{ watchlistEntries = await DataStore.getAll('watchlist'); }catch(e){ console.error('Could not load watchlist', e); watchlistEntries = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
     const companiesChanged = migrateLabelsIntoCompanies();
@@ -1178,6 +1211,7 @@
     else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
     else if(view==='notes'){ browseVal = 'notes'; }
     else if(view==='inbox'){ browseVal = 'inbox'; }
+    else if(view==='watchlist'){ browseVal = 'watchlist'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
     const inboxOpt = document.getElementById('inboxOption');
@@ -1196,6 +1230,7 @@
     if(view === 'albumFilter'){ renderAlbumFilter(q); return; }
     if(view === 'notes'){ renderNotes(); return; }
     if(view === 'inbox'){ renderInbox(); return; }
+    if(view === 'watchlist'){ renderWatchlist(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -1406,6 +1441,7 @@
         '</div>';
       }
     }
+    if(type==='artist'){ html += watchlistSectionHtml(id); }
     html += notesSectionHtml(type, id);
     if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
       const seen = new Set();
@@ -1446,6 +1482,50 @@
     mainEl.querySelectorAll('[data-edit-affiliation]').forEach(function(row){
       row.addEventListener('click', function(){ openAffiliationModal(row.getAttribute('data-edit-affiliation')); });
     });
+    if(document.getElementById('addWatchlistBtn')){
+      document.getElementById('addWatchlistBtn').addEventListener('click', function(){ openWatchlistModal(id); });
+    }
+    if(document.getElementById('editWatchlistBtn')){
+      document.getElementById('editWatchlistBtn').addEventListener('click', function(){ openWatchlistModal(id); });
+    }
+    if(document.getElementById('addSnapshotBtn')){
+      document.getElementById('addSnapshotBtn').addEventListener('click', function(){ openSnapshotModal(id, null); });
+    }
+    mainEl.querySelectorAll('[data-edit-snapshot]').forEach(function(row){
+      row.addEventListener('click', function(){ openSnapshotModal(id, row.getAttribute('data-edit-snapshot')); });
+    });
+    mainEl.querySelectorAll('[data-open-song]').forEach(function(el){
+      el.addEventListener('click', function(){ openModal(el.getAttribute('data-open-song')); });
+    });
+    if(document.getElementById('archiveWatchlistBtn')){
+      document.getElementById('archiveWatchlistBtn').addEventListener('click', async function(){
+        const w = findWatchlistEntry(id);
+        if(!w) return;
+        w.archived = true;
+        await saveWatchlist();
+        toast('Archived \u2014 the Artist and all watchlist history stay put');
+        render();
+      });
+    }
+    if(document.getElementById('reactivateWatchlistBtn')){
+      document.getElementById('reactivateWatchlistBtn').addEventListener('click', async function(){
+        const w = findWatchlistEntry(id);
+        if(!w) return;
+        w.archived = false;
+        await saveWatchlist();
+        toast('Back on the active Watchlist');
+        render();
+      });
+    }
+    if(document.getElementById('deleteWatchlistBtn')){
+      document.getElementById('deleteWatchlistBtn').addEventListener('click', async function(){
+        if(!confirm('Permanently delete all Watchlist history (conviction, thesis, snapshots) for this artist? The Artist itself stays. This cannot be undone.')) return;
+        watchlistEntries = watchlistEntries.filter(function(w){ return w.artistId!==id; });
+        await saveWatchlist();
+        toast('Watchlist history deleted');
+        render();
+      });
+    }
     if(document.getElementById('addNoteBtn')){
       document.getElementById('addNoteBtn').addEventListener('click', function(){ openNoteModal(null, { type: type, id: id }); });
     }
@@ -1481,6 +1561,13 @@
         if(nt.relatedEntities.length !== before) notesChanged = true;
       });
       if(notesChanged){ await saveNotes(); }
+      if(type==='artist'){
+        const hadWatchlist = watchlistEntries.some(function(w){ return w.artistId===id; });
+        if(hadWatchlist){
+          watchlistEntries = watchlistEntries.filter(function(w){ return w.artistId!==id; });
+          await saveWatchlist();
+        }
+      }
       await saveEntityArray(type);
       await saveEntries();
       toast(meta.label + ' deleted');
@@ -2013,6 +2100,277 @@
     });
   }
 
+  function watchlistSectionHtml(artistId){
+    const w = findWatchlistEntry(artistId);
+    let html = '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Watchlist' + (w && w.archived ? ' \u2014 ARCHIVED' : '') + '</div>' +
+      (w ? '<button class="icon-btn" id="editWatchlistBtn" type="button">edit</button>' : '<button class="icon-btn" id="addWatchlistBtn" type="button">+ add to watchlist</button>') +
+      '</div>';
+    if(!w){
+      html += '<div class="writers-label" style="font-style:italic; margin-top:6px;">Not being tracked from an A&amp;R perspective yet.</div></div>';
+      return html;
+    }
+    const growth = watchlistGrowth(w);
+    const best = bestSongForArtist(artistId);
+    html += '<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
+      '<span class="stars">' + starsHtml(w.conviction||0) + '</span>' +
+      (w.priority ? '<span class="stamp-mark stamp-priority">PRIORITY</span>' : '') +
+      (w.careerStage ? '<span class="admin-through">' + esc(w.careerStage.toUpperCase()) + '</span>' : '') +
+      (w.signedStatus ? '<span class="admin-through">' + esc(w.signedStatus.toUpperCase()) + '</span>' : '') +
+    '</div>';
+    if(w.whyAdded) html += '<div class="thoughts" style="margin-top:8px;">' + esc(w.whyAdded) + '</div>';
+    if(w.discoveredDate || w.discoverySource || w.discoveryContext) html += '<div class="publisher" style="margin-top:6px;">Discovered' + (w.discoveredDate?' '+esc(w.discoveredDate):'') + (w.discoverySource?' via '+esc(w.discoverySource):'') + (w.discoveryContext?' \u2014 '+esc(w.discoveryContext):'') + '</div>';
+    if(w.label || w.management || w.publishing){
+      const bits = [];
+      if(w.label) bits.push('Label: '+w.label);
+      if(w.management) bits.push('Management: '+w.management);
+      if(w.publishing) bits.push('Publishing: '+w.publishing);
+      html += '<div class="publisher">' + esc(bits.join(' \u00b7 ')) + '</div>';
+    }
+    if(best) html += '<div class="publisher" style="margin-top:6px;">Best song: <button data-open-song="'+esc(best.id)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(best.song)+'</button> ' + starsHtml(best.rating) + '</div>';
+    if(w.thesis) html += '<div class="publisher" style="margin-top:6px;"><strong>Thesis:</strong> ' + esc(w.thesis) + '</div>';
+    if(w.lastReviewed || w.nextReview) html += '<div class="publisher">' + (w.lastReviewed?'Last reviewed '+esc(w.lastReviewed):'') + (w.lastReviewed&&w.nextReview?' \u00b7 ':'') + (w.nextReview?'Next review '+esc(w.nextReview):'') + '</div>';
+    if(growth){
+      html += '<div class="publisher" style="margin-top:6px;">' + esc(growth.label) + ': ' + esc(String(growth.first)) + ' (' + esc(growth.firstDate) + ') \u2192 ' + esc(String(growth.last)) + ' (' + esc(growth.lastDate) + ') <strong style="color:' + (growth.pct>=0?'var(--teal)':'var(--stamp)') + ';">' + (growth.pct>=0?'+':'') + growth.pct + '%</strong></div>';
+    }
+    if((w.snapshots||[]).length){
+      html += '<div class="writers-label" style="margin-top:10px;">Snapshots</div>';
+      html += '<div class="writer-index" style="margin-top:2px;">' + w.snapshots.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).map(function(s){
+        const bits = [];
+        if(s.spotifyMonthlyListeners) bits.push(s.spotifyMonthlyListeners + ' monthly listeners');
+        if(s.spotifyFollowers) bits.push(s.spotifyFollowers + ' Spotify followers');
+        if(s.instagramFollowers) bits.push(s.instagramFollowers + ' IG followers');
+        if(s.tiktokFollowers) bits.push(s.tiktokFollowers + ' TikTok followers');
+        if(s.youtubeSubscribers) bits.push(s.youtubeSubscribers + ' YT subs');
+        if(s.otherMetric) bits.push(s.otherMetric);
+        return '<div class="writer-row" data-edit-snapshot="'+esc(s.id)+'" style="cursor:pointer;">' +
+          '<div class="writer-name" style="font-size:14px;">' + esc(s.date||'(no date)') + '</div>' +
+          '<div class="writer-songs">' + esc(bits.join(' \u00b7 ')) + (s.notes ? ' \u2014 ' + esc(s.notes) : '') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+    html += '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
+      '<button class="icon-btn" id="addSnapshotBtn" type="button">+ add snapshot</button>' +
+      (w.archived
+        ? '<button class="icon-btn" id="reactivateWatchlistBtn" type="button">reactivate</button><button class="icon-btn" id="deleteWatchlistBtn" type="button">delete permanently</button>'
+        : '<button class="icon-btn" id="archiveWatchlistBtn" type="button">archive</button>') +
+    '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function openWatchlistModal(artistId){
+    const w = findWatchlistEntry(artistId);
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const hasAdvanced = w && (w.careerStage || w.signedStatus || w.label || w.management || w.publishing || w.distributor || w.location || w.genre || w.comparableArtists || w.momentum || w.thesis || w.risks || w.nextSteps || w.lastReviewed || w.nextReview);
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (w ? 'Edit watchlist details' : 'Add to Watchlist') + '</h2>' +
+        '<div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">Track this artist from an A&amp;R perspective \u2014 you can always add more detail later.</div>' +
+        '<div class="field"><label>Why did you add them?</label><textarea id="wl-why" placeholder="What caught your attention...">' + (w?esc(w.whyAdded||''):'') + '</textarea></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Conviction</label><div class="star-picker" id="wlStarPicker"></div></div>' +
+          '<div class="field"><label>Discovery source</label><select id="wl-source"><option value="">\u2014 Unknown \u2014</option>' + DISCOVERY_SOURCES.map(function(s){ return '<option value="'+s+'"'+(w&&w.discoverySource===s?' selected':'')+'>'+s+'</option>'; }).join('') + '</select></div>' +
+        '</div>' +
+        '<div class="like-toggle priority" style="margin-bottom:16px;"><span>Priority lead</span><button type="button" id="wlPriorityBtn" class="' + (w&&w.priority?'on':'') + '">' + (w&&w.priority?'Flagged':'Flag it') + '</button></div>' +
+        '<button type="button" class="add-credit-btn" id="wlShowAdvancedBtn" style="margin-bottom:14px;">' + (hasAdvanced ? 'Hide' : 'Show') + ' more fields</button>' +
+        '<div id="wlAdvanced" style="display:' + (hasAdvanced?'block':'none') + ';">' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Discovered on</label><input id="wl-discovered" type="text" value="' + (w?esc(w.discoveredDate||''):'') + '" placeholder="e.g. Aug 2026"></div>' +
+            '<div class="field"><label>Discovery context</label><input id="wl-context" type="text" value="' + (w?esc(w.discoveryContext||''):'') + '" placeholder="Where/how"></div>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Career stage</label><select id="wl-stage"><option value="">\u2014 Unknown \u2014</option>' + CAREER_STAGES.map(function(s){ return '<option value="'+s+'"'+(w&&w.careerStage===s?' selected':'')+'>'+s+'</option>'; }).join('') + '</select></div>' +
+            '<div class="field"><label>Signed status</label><select id="wl-signed"><option value="">\u2014 Unknown \u2014</option>' + SIGNED_STATUSES.map(function(s){ return '<option value="'+s+'"'+(w&&w.signedStatus===s?' selected':'')+'>'+s+'</option>'; }).join('') + '</select></div>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Label (if any)</label><input id="wl-label" type="text" value="' + (w?esc(w.label||''):'') + '"></div>' +
+            '<div class="field"><label>Management (if any)</label><input id="wl-mgmt" type="text" value="' + (w?esc(w.management||''):'') + '"></div>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Publishing (if any)</label><input id="wl-pub" type="text" value="' + (w?esc(w.publishing||''):'') + '"></div>' +
+            '<div class="field"><label>Distributor (if any)</label><input id="wl-dist" type="text" value="' + (w?esc(w.distributor||''):'') + '"></div>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Location</label><input id="wl-location" type="text" value="' + (w?esc(w.location||''):'') + '"></div>' +
+            '<div class="field"><label>Genre</label><input id="wl-genre" type="text" value="' + (w?esc(w.genre||''):'') + '"></div>' +
+          '</div>' +
+          '<div class="field"><label>Comparable artists</label><input id="wl-comparable" type="text" value="' + (w?esc(w.comparableArtists||''):'') + '"></div>' +
+          '<div class="field"><label>Current momentum</label><textarea id="wl-momentum">' + (w?esc(w.momentum||''):'') + '</textarea></div>' +
+          '<div class="field"><label>Your thesis</label><textarea id="wl-thesis">' + (w?esc(w.thesis||''):'') + '</textarea></div>' +
+          '<div class="field"><label>Risks / questions</label><textarea id="wl-risks">' + (w?esc(w.risks||''):'') + '</textarea></div>' +
+          '<div class="field"><label>What would need to happen next</label><textarea id="wl-next">' + (w?esc(w.nextSteps||''):'') + '</textarea></div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Last reviewed</label><input id="wl-lastreview" type="text" value="' + (w?esc(w.lastReviewed||''):'') + '"></div>' +
+            '<div class="field"><label>Next review</label><input id="wl-nextreview" type="text" value="' + (w?esc(w.nextReview||''):'') + '"></div>' +
+          '</div>' +
+          '<div class="field"><label>Review frequency</label><select id="wl-frequency">' + REVIEW_FREQUENCIES.map(function(f){ return '<option value="'+f+'"'+((w?w.reviewFrequency:'No schedule')===f?' selected':'')+'>'+f+'</option>'; }).join('') + '</select></div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-ghost" id="wlCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="wlSaveBtn" type="button">' + (w ? 'Save changes' : 'Add to Watchlist') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    let conviction = w ? (w.conviction||0) : 0;
+    const starPicker = overlay.querySelector('#wlStarPicker');
+    function renderWlStars(){
+      starPicker.innerHTML = '';
+      for(let i=1;i<=5;i++){
+        const b = document.createElement('button'); b.type='button';
+        b.textContent = i<=conviction ? '\u2605' : '\u2606'; b.className = i<=conviction?'filled':'';
+        b.addEventListener('click', function(){ conviction = (conviction===i)?i-1:i; renderWlStars(); });
+        starPicker.appendChild(b);
+      }
+    }
+    renderWlStars();
+
+    let priority = !!(w && w.priority);
+    const priorityBtn = overlay.querySelector('#wlPriorityBtn');
+    priorityBtn.addEventListener('click', function(){ priority = !priority; priorityBtn.classList.toggle('on', priority); priorityBtn.textContent = priority?'Flagged':'Flag it'; });
+
+    overlay.querySelector('#wlShowAdvancedBtn').addEventListener('click', function(){
+      const adv = overlay.querySelector('#wlAdvanced');
+      const showing = adv.style.display !== 'none';
+      adv.style.display = showing ? 'none' : 'block';
+      overlay.querySelector('#wlShowAdvancedBtn').textContent = (showing?'Show':'Hide') + ' more fields';
+    });
+
+    overlay.querySelector('#wlCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    overlay.querySelector('#wlSaveBtn').addEventListener('click', async function(){
+      const fields = {
+        whyAdded: overlay.querySelector('#wl-why').value.trim(),
+        conviction: conviction,
+        discoverySource: overlay.querySelector('#wl-source').value,
+        priority: priority,
+        discoveredDate: overlay.querySelector('#wl-discovered').value.trim(),
+        discoveryContext: overlay.querySelector('#wl-context').value.trim(),
+        careerStage: overlay.querySelector('#wl-stage').value,
+        signedStatus: overlay.querySelector('#wl-signed').value,
+        label: overlay.querySelector('#wl-label').value.trim(),
+        management: overlay.querySelector('#wl-mgmt').value.trim(),
+        publishing: overlay.querySelector('#wl-pub').value.trim(),
+        distributor: overlay.querySelector('#wl-dist').value.trim(),
+        location: overlay.querySelector('#wl-location').value.trim(),
+        genre: overlay.querySelector('#wl-genre').value.trim(),
+        comparableArtists: overlay.querySelector('#wl-comparable').value.trim(),
+        momentum: overlay.querySelector('#wl-momentum').value.trim(),
+        thesis: overlay.querySelector('#wl-thesis').value.trim(),
+        risks: overlay.querySelector('#wl-risks').value.trim(),
+        nextSteps: overlay.querySelector('#wl-next').value.trim(),
+        lastReviewed: overlay.querySelector('#wl-lastreview').value.trim(),
+        nextReview: overlay.querySelector('#wl-nextreview').value.trim(),
+        reviewFrequency: overlay.querySelector('#wl-frequency').value
+      };
+      if(w){ Object.assign(w, fields); }
+      else { watchlistEntries.push(Object.assign({ id:'wl'+Date.now()+Math.random().toString(36).slice(2,7), artistId: artistId, snapshots: [] }, fields)); }
+      overlay.remove();
+      await saveWatchlist();
+      toast(w ? 'Watchlist details updated' : 'Added to Watchlist');
+      render();
+    });
+  }
+
+  function openSnapshotModal(artistId, snapshotId){
+    const w = findWatchlistEntry(artistId);
+    if(!w) return;
+    const s = snapshotId ? (w.snapshots||[]).find(function(x){ return x.id===snapshotId; }) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (s ? 'Edit snapshot' : 'New snapshot') + '</h2>' +
+        '<div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">A point-in-time record \u2014 never overwritten, so growth stays visible.</div>' +
+        '<div class="field"><label>Date</label><input id="sn-date" type="text" value="' + (s?esc(s.date||''):'') + '" placeholder="e.g. Aug 2026"></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Spotify monthly listeners</label><input id="sn-sml" type="text" value="' + (s?esc(s.spotifyMonthlyListeners||''):'') + '"></div>' +
+          '<div class="field"><label>Spotify followers</label><input id="sn-sf" type="text" value="' + (s?esc(s.spotifyFollowers||''):'') + '"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Instagram followers</label><input id="sn-ig" type="text" value="' + (s?esc(s.instagramFollowers||''):'') + '"></div>' +
+          '<div class="field"><label>TikTok followers</label><input id="sn-tt" type="text" value="' + (s?esc(s.tiktokFollowers||''):'') + '"></div>' +
+        '</div>' +
+        '<div class="field"><label>YouTube subscribers</label><input id="sn-yt" type="text" value="' + (s?esc(s.youtubeSubscribers||''):'') + '"></div>' +
+        '<div class="field"><label>Other metric (optional)</label><input id="sn-other" type="text" value="' + (s?esc(s.otherMetric||''):'') + '" placeholder="Anything else worth noting"></div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="sn-notes">' + (s?esc(s.notes||''):'') + '</textarea></div>' +
+        '<div class="modal-actions">' +
+          (s ? '<button class="btn btn-danger" id="snDeleteBtn" type="button">Delete</button>' : '') +
+          '<button class="btn btn-ghost" id="snCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="snSaveBtn" type="button">' + (s ? 'Save changes' : 'Add snapshot') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#snCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(s){
+      overlay.querySelector('#snDeleteBtn').addEventListener('click', async function(){
+        if(!confirm('Delete this snapshot?')) return;
+        w.snapshots = (w.snapshots||[]).filter(function(x){ return x.id!==s.id; });
+        overlay.remove();
+        await saveWatchlist();
+        toast('Snapshot deleted');
+        render();
+      });
+    }
+    overlay.querySelector('#snSaveBtn').addEventListener('click', async function(){
+      const fields = {
+        date: overlay.querySelector('#sn-date').value.trim(),
+        spotifyMonthlyListeners: overlay.querySelector('#sn-sml').value.trim(),
+        spotifyFollowers: overlay.querySelector('#sn-sf').value.trim(),
+        instagramFollowers: overlay.querySelector('#sn-ig').value.trim(),
+        tiktokFollowers: overlay.querySelector('#sn-tt').value.trim(),
+        youtubeSubscribers: overlay.querySelector('#sn-yt').value.trim(),
+        otherMetric: overlay.querySelector('#sn-other').value.trim(),
+        notes: overlay.querySelector('#sn-notes').value.trim()
+      };
+      if(!fields.date){ toast('Give the snapshot a date first'); return; }
+      if(!w.snapshots) w.snapshots = [];
+      if(s){ Object.assign(s, fields); }
+      else { w.snapshots.push(Object.assign({ id:'sn'+Date.now()+Math.random().toString(36).slice(2,7) }, fields)); }
+      overlay.remove();
+      await saveWatchlist();
+      toast(s ? 'Snapshot updated' : 'Snapshot added');
+      render();
+    });
+  }
+
+  function renderWatchlist(){
+    const rowFn = function(w){
+      const artist = findEntityById('artist', w.artistId);
+      const growth = watchlistGrowth(w);
+      return '<div class="writer-row" data-entity-type="artist" data-entity-id="'+esc(w.artistId)+'">' +
+        '<div class="writer-name" style="font-size:16px;">' + (artist?esc(artist.name):'(missing artist)') + (w.priority?' <span class="admin-through">PRIORITY</span>':'') + '</div>' +
+        '<div class="writer-count">' + starsHtml(w.conviction||0) + '</div>' +
+        '<div class="writer-songs">' + (w.careerStage?esc(w.careerStage)+' \u00b7 ':'') + (w.signedStatus?esc(w.signedStatus)+' \u00b7 ':'') + esc(w.whyAdded||'').slice(0,80) + (growth ? ' \u2014 ' + (growth.pct>=0?'+':'') + growth.pct + '%' : '') + (w.nextReview ? ' \u00b7 next review '+esc(w.nextReview) : '') + '</div>' +
+      '</div>';
+    };
+    const active = watchlistEntries.filter(function(w){ return !w.archived; }).sort(function(a,b){
+      if((b.priority?1:0) !== (a.priority?1:0)) return (b.priority?1:0)-(a.priority?1:0);
+      return (b.conviction||0)-(a.conviction||0);
+    });
+    const archived = watchlistEntries.filter(function(w){ return w.archived; });
+    if(!watchlistEntries.length){
+      mainEl.innerHTML = '<div class="empty"><strong>Nothing on the Watchlist yet</strong>Open an Artist\u2019s profile and click "+ add to watchlist" to start tracking them from an A&amp;R perspective.</div>';
+      return;
+    }
+    let html = active.length ? '<div class="writer-index">' + active.map(rowFn).join('') + '</div>' : '<div class="empty"><strong>Nothing active</strong>Everything on your Watchlist is currently archived.</div>';
+    if(archived.length){
+      html += '<div class="stats-section"><h3>Archived (' + archived.length + ')</h3></div>';
+      html += '<div class="writer-index">' + archived.map(rowFn).join('') + '</div>';
+    }
+    mainEl.innerHTML = html;
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+  }
+
   function renderStats(){
     const wMap = entityUsageMap('person'), aMap = entityUsageMap('artist'), cMap = entityUsageMap('company');
     const revisitCount = entries.filter(function(e){ return e.revisit; }).length;
@@ -2282,7 +2640,8 @@
       companies: companies,
       affiliations: affiliations,
       notes: notes,
-      inboxItems: inboxItems
+      inboxItems: inboxItems,
+      watchlistEntries: watchlistEntries
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -2315,7 +2674,7 @@
     const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
     const restoredCompanies = data.companies || data.publishers || [];
     const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length + ', Inbox items: ' + (data.inboxItems||[]).length;
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length + ', Inbox items: ' + (data.inboxItems||[]).length + ', Watchlist entries: ' + (data.watchlistEntries||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
@@ -2327,6 +2686,7 @@
     affiliations = data.affiliations || [];
     notes = data.notes || [];
     inboxItems = data.inboxItems || [];
+    watchlistEntries = data.watchlistEntries || [];
     entries.forEach(normalize);
     migrateContactsIntoPeople();
     migrateLabelsIntoCompanies();
@@ -2338,6 +2698,7 @@
     await saveAffiliations();
     await saveNotes();
     await saveInbox();
+    await saveWatchlist();
     toast('Backup restored');
     view = 'songs'; render();
   }
@@ -2626,6 +2987,7 @@
     else if(v==='albums'){ view='albums'; }
     else if(v==='notes'){ view='notes'; }
     else if(v==='inbox'){ view='inbox'; }
+    else if(v==='watchlist'){ view='watchlist'; }
     else if(v==='stats'){ view='stats'; }
     else { return; }
     render();
