@@ -213,6 +213,8 @@
     <option value="people">People</option>
     <option value="artists">Artists</option>
     <option value="companies">Companies</option>
+    <option value="venues">Venues</option>
+    <option value="shows">Shows</option>
     <option value="tags">Tags</option>
     <option value="albums">Releases</option>
     <option value="notes">Notes</option>
@@ -282,6 +284,7 @@
   const ARTIST_STORAGE_KEY = 'song_artists_v1';
   const PERSON_STORAGE_KEY = 'song_writers_v1'; // unchanged key: this is where Writers used to live, now holds unified People
   const COMPANY_STORAGE_KEY = 'song_publishers_v1'; // unchanged key: this is where Publishers used to live, now holds unified Companies
+  const VENUE_STORAGE_KEY = 'song_venues_v1';
   const LEGACY_LABEL_STORAGE_KEY = 'song_labels_v1'; // read once to migrate, never written to again
   const LEGACY_CONTACT_STORAGE_KEY = 'song_contacts_v1'; // read once to migrate, never written to again
   const SCHEMA_VERSION = 3;
@@ -291,6 +294,8 @@
   let artists = [];
   let people = [];
   let companies = [];
+  let venues = [];
+  let shows = [];
   let legacyLabels = [];
   let legacyContacts = [];
   let affiliations = [];
@@ -314,7 +319,8 @@
   const ENTITY_META = {
     person:  { label: 'Person' },
     artist:  { label: 'Artist' },
-    company: { label: 'Company' }
+    company: { label: 'Company' },
+    venue:   { label: 'Venue' }
   };
 
   const mainEl = document.getElementById('main');
@@ -464,11 +470,13 @@
   function entityArray(type){
     if(type==='artist') return artists;
     if(type==='person') return people;
+    if(type==='venue') return venues;
     return companies;
   }
   function entityStorageKey(type){
     if(type==='artist') return ARTIST_STORAGE_KEY;
     if(type==='person') return PERSON_STORAGE_KEY;
+    if(type==='venue') return VENUE_STORAGE_KEY;
     return COMPANY_STORAGE_KEY;
   }
   function findEntityById(type, id){
@@ -746,6 +754,140 @@
     return rated.sort(function(a,b){ return (b.rating||0)-(a.rating||0); })[0];
   }
 
+  // ===== Shows: a specific artist at a specific venue on a specific date =====
+  async function saveShows(){
+    await syncNormalizedCollection('shows', shows);
+  }
+  function findShow(id){ return shows.find(function(s){ return s.id===id; }) || null; }
+  function showsForArtist(artistId){
+    return shows.filter(function(s){ return s.artistId===artistId; })
+      .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  }
+  function showsForVenue(venueId){
+    return shows.filter(function(s){ return s.venueId===venueId; })
+      .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  }
+  function showsSectionHtml(type, id){
+    const list = type==='venue' ? showsForVenue(id) : showsForArtist(id);
+    let html = '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Shows</div><button class="icon-btn" id="addShowBtn" type="button">+ add</button></div>';
+    if(list.length){
+      html += '<div class="writer-index" style="margin-top:4px;">' + list.map(function(s){
+        const artist = findEntityById('artist', s.artistId);
+        const venue = findEntityById('venue', s.venueId);
+        const other = type==='venue' ? (artist?artist.name:'(unknown artist)') : (venue?venue.name:'');
+        return '<div class="writer-row" data-edit-show="' + esc(s.id) + '" style="cursor:pointer;">' +
+          '<div class="writer-name" style="font-size:15px;">' + esc(s.date||'(no date)') + (s.status==='upcoming' ? ' <span class="admin-through">UPCOMING</span>' : '') + '</div>' +
+          '<div class="writer-count">' + esc(other) + '</div>' +
+          '<div class="writer-songs">' + esc((s.thoughts||'').slice(0,100)) + ((s.thoughts||'').length>100?'\u2026':'') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div class="writers-label" style="font-style:italic; margin-top:6px;">No shows logged yet.</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function openShowModal(id, presetArtistId, presetVenueId){
+    const s = id ? findShow(id) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const artistVal = s ? (findEntityById('artist', s.artistId)||{}).name : (presetArtistId ? (findEntityById('artist', presetArtistId)||{}).name : '');
+    const venueVal = s ? (findEntityById('venue', s.venueId)||{}).name : (presetVenueId ? (findEntityById('venue', presetVenueId)||{}).name : '');
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>' + (s ? 'Edit show' : 'New show') + '</h2>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Artist</label><input id="sh-artist" type="text" list="showArtistNamesList" value="' + esc(artistVal||'') + '" placeholder="Who\u2019s playing"></div>' +
+          '<div class="field"><label>Venue (optional)</label><input id="sh-venue" type="text" list="showVenueNamesList" value="' + esc(venueVal||'') + '" placeholder="Where"></div>' +
+        '</div>' +
+        buildDatalist('showArtistNamesList','artist') + buildDatalist('showVenueNamesList','venue') +
+        '<div class="field-row">' +
+          '<div class="field"><label>Date</label><input id="sh-date" type="text" value="' + (s?esc(s.date||''):'') + '" placeholder="e.g. Sep 12, 2026"></div>' +
+          '<div class="field"><label>Status</label><select id="sh-status"><option value="upcoming"' + (!s||s.status==='upcoming'?' selected':'') + '>Upcoming</option><option value="attended"' + (s&&s.status==='attended'?' selected':'') + '>Attended</option></select></div>' +
+        '</div>' +
+        '<div class="field"><label>Your thoughts (optional)</label><textarea id="sh-thoughts" placeholder="What you\u2019re hoping for, or what you thought afterward\u2026">' + (s?esc(s.thoughts||''):'') + '</textarea></div>' +
+        '<div class="modal-actions">' +
+          (s ? '<button class="btn btn-danger" id="shDeleteBtn" type="button">Delete</button>' : '') +
+          '<button class="btn btn-ghost" id="shCancelBtn" type="button">Cancel</button>' +
+          '<button class="btn btn-primary" id="shSaveBtn" type="button">' + (s ? 'Save changes' : 'Add show') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#shCancelBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+    if(s){
+      overlay.querySelector('#shDeleteBtn').addEventListener('click', async function(){
+        if(!confirm('Delete this show?')) return;
+        shows = shows.filter(function(x){ return x.id!==s.id; });
+        overlay.remove();
+        await saveShows();
+        toast('Show deleted');
+        render();
+      });
+    }
+    overlay.querySelector('#shSaveBtn').addEventListener('click', async function(){
+      const artistTxt = overlay.querySelector('#sh-artist').value.trim();
+      const venueTxt = overlay.querySelector('#sh-venue').value.trim();
+      const date = overlay.querySelector('#sh-date').value.trim();
+      const status = overlay.querySelector('#sh-status').value;
+      const thoughts = overlay.querySelector('#sh-thoughts').value.trim();
+      if(!artistTxt){ toast('Which artist is this show for?'); return; }
+      const artistEnt = findOrCreateEntity('artist', artistTxt);
+      const venueEnt = venueTxt ? findOrCreateEntity('venue', venueTxt) : null;
+      const fields = { artistId: artistEnt.id, venueId: venueEnt ? venueEnt.id : '', date: date, status: status, thoughts: thoughts };
+      if(s){ Object.assign(s, fields); }
+      else { shows.push(Object.assign({ id: 'sh'+Date.now()+Math.random().toString(36).slice(2,7), createdAt: Date.now() }, fields)); }
+      overlay.remove();
+      await saveEntityArray('artist');
+      await saveEntityArray('venue');
+      await saveShows();
+      toast(s ? 'Show updated' : 'Show added');
+      render();
+    });
+  }
+
+  function renderShows(){
+    const upcoming = shows.filter(function(s){ return s.status==='upcoming'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    const past = shows.filter(function(s){ return s.status!=='upcoming'; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    let html = '<div style="margin-bottom:14px;"><button class="btn btn-ghost" id="newShowBtn" type="button">+ New show</button></div>';
+    if(!shows.length){
+      html += '<div class="empty"><strong>No shows logged yet</strong>Add one from an Artist or Venue profile, or start here.</div>';
+      mainEl.innerHTML = html;
+      document.getElementById('newShowBtn').addEventListener('click', function(){ openShowModal(null); });
+      return;
+    }
+    function rowHtml(s){
+      const artist = findEntityById('artist', s.artistId);
+      const venue = findEntityById('venue', s.venueId);
+      return '<div class="writer-row">' +
+        '<div class="writer-name" style="font-size:15px;">' + (artist?'<button data-entity-type="artist" data-entity-id="'+esc(s.artistId)+'" style="background:none;border:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;">'+esc(artist.name)+'</button>':'(missing artist)') + (s.status==='upcoming'?' <span class="admin-through">UPCOMING</span>':'') + '</div>' +
+        '<div class="writer-count">' + esc(s.date||'') + '</div>' +
+        '<div class="writer-songs">' + (venue?'<button data-entity-type="venue" data-entity-id="'+esc(s.venueId)+'" style="background:none;border:none;color:var(--teal);font:inherit;cursor:pointer;text-decoration:underline;">'+esc(venue.name)+'</button> \u00b7 ':'') + esc((s.thoughts||'').slice(0,80)) + '</div>' +
+        '<button class="icon-btn" data-edit-show="'+esc(s.id)+'" type="button">edit</button>' +
+      '</div>';
+    }
+    if(upcoming.length){
+      html += '<div class="stats-section"><h3>Upcoming</h3></div><div class="writer-index">' + upcoming.map(rowHtml).join('') + '</div>';
+    }
+    if(past.length){
+      html += '<div class="stats-section"><h3>Past</h3></div><div class="writer-index">' + past.map(rowHtml).join('') + '</div>';
+    }
+    mainEl.innerHTML = html;
+    document.getElementById('newShowBtn').addEventListener('click', function(){ openShowModal(null); });
+    mainEl.querySelectorAll('[data-edit-show]').forEach(function(el){
+      el.addEventListener('click', function(){ openShowModal(el.getAttribute('data-edit-show')); });
+    });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+  }
+
   // ===== Hierarchy rollup (sub-labels under a major, sub-publishers under an admin) =====
   function directChildIds(type, parentId){
     if(type!=='company') return [];
@@ -772,7 +914,7 @@
       const res = await storageSet(entityStorageKey(type), JSON.stringify(entityArray(type)));
       if(!res){ toast('Save failed — try again'); }
     }catch(e){ toast('Save failed — try again'); }
-    const normalizedName = type==='artist' ? 'artists' : type==='person' ? 'people' : 'companies';
+    const normalizedName = type==='artist' ? 'artists' : type==='person' ? 'people' : type==='venue' ? 'venues' : 'companies';
     await syncNormalizedCollection(normalizedName, entityArray(type));
   }
   function entryEntityIds(type, e){
@@ -1062,6 +1204,8 @@
     try{ notes = await DataStore.getAll('notes'); }catch(e){ console.error('Could not load notes', e); notes = []; }
     try{ inboxItems = await DataStore.getAll('inbox'); }catch(e){ console.error('Could not load inbox', e); inboxItems = []; }
     try{ watchlistEntries = await DataStore.getAll('watchlist'); }catch(e){ console.error('Could not load watchlist', e); watchlistEntries = []; }
+    try{ venues = await DataStore.getAll('venues'); }catch(e){ console.error('Could not load venues', e); venues = []; }
+    try{ shows = await DataStore.getAll('shows'); }catch(e){ console.error('Could not load shows', e); shows = []; }
     entries.forEach(normalize);
     const peopleChanged = migrateContactsIntoPeople();
     const companiesChanged = migrateLabelsIntoCompanies();
@@ -1207,11 +1351,13 @@
     if(activeEntityType==='person') browseVal = 'people';
     else if(activeEntityType==='artist') browseVal = 'artists';
     else if(activeEntityType==='company') browseVal = 'companies';
+    else if(activeEntityType==='venue') browseVal = 'venues';
     else if(view==='tags' || view==='tagFilter'){ browseVal = 'tags'; }
     else if(view==='albums' || view==='albumFilter'){ browseVal = 'albums'; }
     else if(view==='notes'){ browseVal = 'notes'; }
     else if(view==='inbox'){ browseVal = 'inbox'; }
     else if(view==='watchlist'){ browseVal = 'watchlist'; }
+    else if(view==='shows'){ browseVal = 'shows'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
     const inboxOpt = document.getElementById('inboxOption');
@@ -1231,6 +1377,7 @@
     if(view === 'notes'){ renderNotes(); return; }
     if(view === 'inbox'){ renderInbox(); return; }
     if(view === 'watchlist'){ renderWatchlist(); return; }
+    if(view === 'shows'){ renderShows(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -1390,6 +1537,9 @@
       (companyTypeTags ? '<div class="publisher">' + esc(companyTypeTags) + '</div>' : '') +
       (type==='person' && (ent.contactRole || ent.company) ? '<div class="artist" style="margin-top:2px;">' + esc(ent.contactRole||'') + (ent.company ? (ent.contactRole?' \u00b7 ':'') + (findCompanyMatch(ent.company) ? '<button data-entity-type="'+findCompanyMatch(ent.company).type+'" data-entity-id="'+esc(findCompanyMatch(ent.company).ent.id)+'" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;text-transform:inherit;letter-spacing:inherit;">'+esc(ent.company)+'</button>' : esc(ent.company)) : '') + '</div>' : '') +
       (type==='person' && ent.email ? '<div class="publisher">Email: ' + esc(ent.email) + '</div>' : '') +
+      (type==='venue' ? '<div class="artist" style="margin-top:2px;">' + esc(ent.venueType||'') + (ent.neighborhood ? (ent.venueType?' \u00b7 ':'') + esc(ent.neighborhood) : '') + '</div>' : '') +
+      (type==='venue' && ent.capacity ? '<div class="publisher">Capacity: ' + esc(ent.capacity) + '</div>' : '') +
+      (type==='venue' && ent.website ? '<div class="publisher"><a href="'+esc(ent.website)+'" target="_blank" rel="noopener" style="color:var(--teal);">'+esc(ent.website)+'</a></div>' : '') +
       (ent.ipi ? '<div class="publisher">IPI: ' + esc(ent.ipi) + (ent.pro ? ' \u00b7 ' + esc(ent.pro) : '') + '</div>' : (ent.pro ? '<div class="publisher">PRO: ' + esc(ent.pro) + '</div>' : '')) +
       (type==='company' && ent.parentCompanyId && findEntityById('company', ent.parentCompanyId) ? '<div class="publisher">Under <button data-entity-type="company" data-entity-id="'+esc(ent.parentCompanyId)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(findEntityById('company', ent.parentCompanyId).name)+'</button>' + (ent.administeredTerritory ? ' ('+esc(ent.administeredTerritory)+')' : '') + '</div>' : '') +
       (directChildren.length ? '<div class="writers-label" style="margin-top:8px;">Sub-companies</div><div class="chip-row">' + directChildren.map(function(c){ return '<button class="chip" data-entity-type="'+type+'" data-entity-id="'+esc(c.id)+'">'+esc(c.name)+'</button>'; }).join('') + '</div>' : '') +
@@ -1398,8 +1548,9 @@
       (dup ? '<div class="publisher" style="color:var(--stamp);">\u26a0 Possible duplicate of <button data-entity-type="'+type+'" data-entity-id="'+esc(dup.id)+'" style="background:none;border:none;color:var(--stamp);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(dup.name)+'</button> \u2014 these were separate records before merging. Review and edit manually if they\u2019re the same.</div>' : '') +
       (ent.notes ? '<div class="thoughts" style="margin-top:8px;">' + esc(ent.notes) + '</div>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
-        '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a>' +
-        '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>' +
+        (type==='venue'
+          ? '<a class="link-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/' + encodeURIComponent(ent.name + (ent.neighborhood?' '+ent.neighborhood:'')) + '">Maps \u2197</a>'
+          : '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>') +
         (type==='person' || (type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1) ? '<a class="link-btn" target="_blank" rel="noopener" href="' + songviewUrl(ent.name) + '">BMI Songview \u2197</a><a class="link-btn" target="_blank" rel="noopener" href="' + mlcUrl() + '">MLC Search \u2197</a>' : '') +
         '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
         '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
@@ -1442,6 +1593,7 @@
       }
     }
     if(type==='artist'){ html += watchlistSectionHtml(id); }
+    if(type==='artist' || type==='venue'){ html += showsSectionHtml(type, id); }
     html += notesSectionHtml(type, id);
     if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
       const seen = new Set();
@@ -1466,13 +1618,15 @@
         '</div>';
       }
     }
-    if(directChildren.length){
-      html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-compan' + (directChildren.length===1?'y':'ies') + '</div>';
+    if(type!=='venue'){
+      if(directChildren.length){
+        html += '<div class="filter-banner">Showing ' + list.length + ' song' + (list.length===1?'':'s') + ' across ' + esc(ent.name) + ' and its ' + directChildren.length + ' sub-compan' + (directChildren.length===1?'y':'ies') + '</div>';
+      }
+      if(!directChildren.length){
+        html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
+      }
+      html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Attach this ' + meta.label.toLowerCase() + ' to a card to see it here.</div>';
     }
-    if(!directChildren.length){
-      html += '<div class="filter-banner">' + list.length + ' song' + (list.length===1?'':'s') + '</div>';
-    }
-    html += list.length ? '<div class="grid">' + list.map(cardHtml).join('') + '</div>' : '<div class="empty"><strong>No songs yet</strong>Attach this ' + meta.label.toLowerCase() + ' to a card to see it here.</div>';
     mainEl.innerHTML = html;
     document.getElementById('backToEntity').addEventListener('click', function(){ view='entityIndex'; entityIndexType=type; render(); });
     document.getElementById('editEntityBtn').addEventListener('click', function(){ openEntityModal(type, id); });
@@ -1493,6 +1647,15 @@
     }
     mainEl.querySelectorAll('[data-edit-snapshot]').forEach(function(row){
       row.addEventListener('click', function(){ openSnapshotModal(id, row.getAttribute('data-edit-snapshot')); });
+    });
+    if(document.getElementById('addShowBtn')){
+      document.getElementById('addShowBtn').addEventListener('click', function(){
+        if(type==='venue'){ openShowModal(null, null, id); }
+        else { openShowModal(null, id, null); }
+      });
+    }
+    mainEl.querySelectorAll('[data-edit-show]').forEach(function(row){
+      row.addEventListener('click', function(){ openShowModal(row.getAttribute('data-edit-show')); });
     });
     mainEl.querySelectorAll('[data-open-song]').forEach(function(el){
       el.addEventListener('click', function(){ openModal(el.getAttribute('data-open-song')); });
@@ -1567,6 +1730,15 @@
           watchlistEntries = watchlistEntries.filter(function(w){ return w.artistId!==id; });
           await saveWatchlist();
         }
+        if(shows.some(function(s){ return s.artistId===id; })){
+          shows = shows.filter(function(s){ return s.artistId!==id; });
+          await saveShows();
+        }
+      }
+      if(type==='venue'){
+        let showsChanged = false;
+        shows.forEach(function(s){ if(s.venueId===id){ s.venueId=''; showsChanged=true; } });
+        if(showsChanged){ await saveShows(); }
       }
       await saveEntityArray(type);
       await saveEntries();
@@ -1595,6 +1767,7 @@
     const showParentCompany = (type==='company');
     const showManager = (type==='artist');
     const showContactInfo = (type==='person');
+    const showVenueInfo = (type==='venue');
     let extraFields = '';
     if(showCompanyTypes){
       extraFields += '<div class="field"><label>Company type</label><div style="display:flex; gap:16px; flex-wrap:wrap;">' +
@@ -1620,6 +1793,16 @@
           majorCompanies.map(function(c){ return '<option value="'+esc(c.id)+'"'+(ent && ent.parentCompanyId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'; }).join('') +
         '</select><div class="hint">' + (majorCompanies.length ? 'Only companies tagged as a major show up here.' : 'No companies are tagged as a major yet \u2014 tag one first, then it\u2019ll appear here to pick from.') + '</div></div>' +
         '<div class="field"><label>Territory (optional)</label><input id="ent-territory" type="text" value="'+(ent?esc(ent.administeredTerritory||''):'')+'" placeholder="e.g. UK &amp; Europe"></div>' +
+      '</div>';
+    }
+    if(showVenueInfo){
+      extraFields += '<div class="field-row">' +
+        '<div class="field"><label>Neighborhood / area</label><input id="ent-neighborhood" type="text" value="' + (ent?esc(ent.neighborhood||''):'') + '" placeholder="e.g. Williamsburg, Brooklyn"></div>' +
+        '<div class="field"><label>Venue type</label><input id="ent-venuetype" type="text" value="' + (ent?esc(ent.venueType||''):'') + '" placeholder="e.g. Club, DIY space, Theater"></div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Capacity (optional)</label><input id="ent-capacity" type="text" value="' + (ent?esc(ent.capacity||''):'') + '" placeholder="e.g. 250"></div>' +
+        '<div class="field"><label>Website (optional)</label><input id="ent-website" type="text" value="' + (ent?esc(ent.website||''):'') + '" placeholder="Paste a link"></div>' +
       '</div>';
     }
     if(showContactInfo){
@@ -1670,6 +1853,12 @@
       if(!name){ toast('Give it a name first'); return; }
       const extra = { photoUrl: photoUrl };
       if(showIpi){ extra.ipi = overlay.querySelector('#ent-ipi').value.trim(); extra.pro = overlay.querySelector('#ent-pro').value; }
+      if(showVenueInfo){
+        extra.neighborhood = overlay.querySelector('#ent-neighborhood').value.trim();
+        extra.venueType = overlay.querySelector('#ent-venuetype').value.trim();
+        extra.capacity = overlay.querySelector('#ent-capacity').value.trim();
+        extra.website = overlay.querySelector('#ent-website').value.trim();
+      }
       if(showContactInfo){
         extra.contactRole = overlay.querySelector('#ent-role').value.trim();
         extra.company = overlay.querySelector('#ent-company').value.trim();
@@ -1994,7 +2183,7 @@
         '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13px; color:var(--ink);"><input type="checkbox" id="nt-pinned" style="width:auto;"' + (n&&n.pinned?' checked':'') + '> Pin to top</label></div>' +
         '<div class="field"><label>Related to</label><div id="relatedChips" class="chip-row" style="margin-bottom:8px;"></div>' +
           '<div class="lookup-row">' +
-            '<select id="nt-rel-type" style="max-width:120px;"><option value="person">Person</option><option value="artist">Artist</option><option value="company">Company</option><option value="release">Release</option></select>' +
+            '<select id="nt-rel-type" style="max-width:120px;"><option value="person">Person</option><option value="artist">Artist</option><option value="company">Company</option><option value="venue">Venue</option><option value="release">Release</option></select>' +
             '<select id="nt-rel-entity"></select>' +
             '<button type="button" class="lookup-btn" id="addRelatedBtn">+ Add</button>' +
           '</div>' +
@@ -2641,7 +2830,9 @@
       affiliations: affiliations,
       notes: notes,
       inboxItems: inboxItems,
-      watchlistEntries: watchlistEntries
+      watchlistEntries: watchlistEntries,
+      venues: venues,
+      shows: shows
     };
     const json = JSON.stringify(backup, null, 2);
     const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
@@ -2674,7 +2865,7 @@
     const restoredLegacyContacts = data.people ? [] : (data.contacts || []);
     const restoredCompanies = data.companies || data.publishers || [];
     const restoredLegacyLabels = data.companies ? [] : (data.labels || []);
-    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length + ', Inbox items: ' + (data.inboxItems||[]).length + ', Watchlist entries: ' + (data.watchlistEntries||[]).length;
+    const counts = 'Songs: ' + data.entries.length + ', People: ' + restoredPeople.length + (restoredLegacyContacts.length ? ' (+' + restoredLegacyContacts.length + ' legacy contacts to merge)' : '') + ', Artists: ' + (data.artists||[]).length + ', Companies: ' + restoredCompanies.length + (restoredLegacyLabels.length ? ' (+' + restoredLegacyLabels.length + ' legacy labels to merge)' : '') + ', Albums: ' + (data.albums||[]).length + ', Affiliations: ' + (data.affiliations||[]).length + ', Notes: ' + (data.notes||[]).length + ', Inbox items: ' + (data.inboxItems||[]).length + ', Watchlist entries: ' + (data.watchlistEntries||[]).length + ', Venues: ' + (data.venues||[]).length + ', Shows: ' + (data.shows||[]).length;
     if(!confirm('This will REPLACE everything currently in your database with this backup.\n\n' + counts + '\n\nMake sure you trust this file. Continue?')) return;
     entries = data.entries || [];
     albums = data.albums || [];
@@ -2687,6 +2878,8 @@
     notes = data.notes || [];
     inboxItems = data.inboxItems || [];
     watchlistEntries = data.watchlistEntries || [];
+    venues = data.venues || [];
+    shows = data.shows || [];
     entries.forEach(normalize);
     migrateContactsIntoPeople();
     migrateLabelsIntoCompanies();
@@ -2695,10 +2888,12 @@
     await saveEntityArray('artist');
     await saveEntityArray('person');
     await saveEntityArray('company');
+    await saveEntityArray('venue');
     await saveAffiliations();
     await saveNotes();
     await saveInbox();
     await saveWatchlist();
+    await saveShows();
     toast('Backup restored');
     view = 'songs'; render();
   }
@@ -2983,11 +3178,13 @@
     if(v==='people'){ view='entityIndex'; entityIndexType='person'; }
     else if(v==='artists'){ view='entityIndex'; entityIndexType='artist'; }
     else if(v==='companies'){ view='entityIndex'; entityIndexType='company'; }
+    else if(v==='venues'){ view='entityIndex'; entityIndexType='venue'; }
     else if(v==='tags'){ view='tags'; }
     else if(v==='albums'){ view='albums'; }
     else if(v==='notes'){ view='notes'; }
     else if(v==='inbox'){ view='inbox'; }
     else if(v==='watchlist'){ view='watchlist'; }
+    else if(v==='shows'){ view='shows'; }
     else if(v==='stats'){ view='stats'; }
     else { return; }
     render();
