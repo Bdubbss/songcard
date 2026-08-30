@@ -759,8 +759,12 @@
     await syncNormalizedCollection('shows', shows);
   }
   function findShow(id){ return shows.find(function(s){ return s.id===id; }) || null; }
+  function showArtistIds(s){
+    if(Array.isArray(s.artistIds)) return s.artistIds;
+    return s.artistId ? [s.artistId] : [];
+  }
   function showsForArtist(artistId){
-    return shows.filter(function(s){ return s.artistId===artistId; })
+    return shows.filter(function(s){ return showArtistIds(s).indexOf(artistId) !== -1; })
       .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   }
   function showsForVenue(venueId){
@@ -773,12 +777,16 @@
       '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Shows</div><button class="icon-btn" id="addShowBtn" type="button">+ add</button></div>';
     if(list.length){
       html += '<div class="writer-index" style="margin-top:4px;">' + list.map(function(s){
-        const artist = findEntityById('artist', s.artistId);
+        const artistIds = showArtistIds(s);
+        const artistNames = artistIds.map(function(aid){ const a=findEntityById('artist',aid); return a?a.name:null; }).filter(Boolean);
         const venue = findEntityById('venue', s.venueId);
-        const other = type==='venue' ? (artist?artist.name:'(unknown artist)') : (venue?venue.name:'');
+        const otherArtists = type==='artist' ? artistNames.filter(function(n){ const a=findEntityById('artist',id); return !a || n!==a.name; }) : artistNames;
+        const bits = [];
+        if(type==='venue') bits.push(artistNames.length ? artistNames.join(', ') : '(unknown artist)');
+        else { if(venue) bits.push(venue.name); if(otherArtists.length) bits.push('with '+otherArtists.join(', ')); }
         return '<div class="writer-row" data-edit-show="' + esc(s.id) + '" style="cursor:pointer;">' +
           '<div class="writer-name" style="font-size:15px;">' + esc(s.date||'(no date)') + (s.status==='upcoming' ? ' <span class="admin-through">UPCOMING</span>' : '') + '</div>' +
-          '<div class="writer-count">' + esc(other) + '</div>' +
+          '<div class="writer-count">' + esc(bits.join(' \u00b7 ')) + '</div>' +
           '<div class="writer-songs">' + esc((s.thoughts||'').slice(0,100)) + ((s.thoughts||'').length>100?'\u2026':'') + '</div>' +
         '</div>';
       }).join('') + '</div>';
@@ -789,19 +797,29 @@
     return html;
   }
 
+  function addShowArtistRow(overlay, artistName){
+    const wrap = overlay.querySelector('#showArtistRows');
+    const row = document.createElement('div');
+    row.className = 'credit-row';
+    row.innerHTML =
+      '<input type="text" class="show-artist-input" list="showArtistNamesList" placeholder="Artist name" value="'+esc(artistName||'')+'">' +
+      '<button type="button" class="credit-remove" aria-label="Remove this artist">\u00d7</button>';
+    row.querySelector('.credit-remove').addEventListener('click', function(){ row.remove(); });
+    wrap.appendChild(row);
+  }
+
   function openShowModal(id, presetArtistId, presetVenueId){
     const s = id ? findShow(id) : null;
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    const artistVal = s ? (findEntityById('artist', s.artistId)||{}).name : (presetArtistId ? (findEntityById('artist', presetArtistId)||{}).name : '');
     const venueVal = s ? (findEntityById('venue', s.venueId)||{}).name : (presetVenueId ? (findEntityById('venue', presetVenueId)||{}).name : '');
     overlay.innerHTML = '' +
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h2>' + (s ? 'Edit show' : 'New show') + '</h2>' +
-        '<div class="field-row">' +
-          '<div class="field"><label>Artist</label><input id="sh-artist" type="text" list="showArtistNamesList" value="' + esc(artistVal||'') + '" placeholder="Who\u2019s playing"></div>' +
-          '<div class="field"><label>Venue (optional)</label><input id="sh-venue" type="text" list="showVenueNamesList" value="' + esc(venueVal||'') + '" placeholder="Where"></div>' +
+        '<div class="field"><label>Artists on the bill</label><div id="showArtistRows"></div>' +
+          '<button type="button" class="add-credit-btn" id="addShowArtistBtn">+ Add another artist</button>' +
         '</div>' +
+        '<div class="field"><label>Venue (optional)</label><input id="sh-venue" type="text" list="showVenueNamesList" value="' + esc(venueVal||'') + '" placeholder="Where"></div>' +
         buildDatalist('showArtistNamesList','artist') + buildDatalist('showVenueNamesList','venue') +
         '<div class="field-row">' +
           '<div class="field"><label>Date</label><input id="sh-date" type="text" value="' + (s?esc(s.date||''):'') + '" placeholder="e.g. Sep 12, 2026"></div>' +
@@ -815,6 +833,15 @@
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
+
+    const existingIds = s ? showArtistIds(s) : (presetArtistId ? [presetArtistId] : []);
+    if(existingIds.length){
+      existingIds.forEach(function(aid){ const a=findEntityById('artist',aid); addShowArtistRow(overlay, a?a.name:''); });
+    } else {
+      addShowArtistRow(overlay, '');
+    }
+    overlay.querySelector('#addShowArtistBtn').addEventListener('click', function(){ addShowArtistRow(overlay, ''); });
+
     overlay.querySelector('#shCancelBtn').addEventListener('click', function(){ overlay.remove(); });
     overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
     if(s){
@@ -828,16 +855,16 @@
       });
     }
     overlay.querySelector('#shSaveBtn').addEventListener('click', async function(){
-      const artistTxt = overlay.querySelector('#sh-artist').value.trim();
+      const artistNames = Array.from(overlay.querySelectorAll('.show-artist-input')).map(function(inp){ return inp.value.trim(); }).filter(Boolean);
       const venueTxt = overlay.querySelector('#sh-venue').value.trim();
       const date = overlay.querySelector('#sh-date').value.trim();
       const status = overlay.querySelector('#sh-status').value;
       const thoughts = overlay.querySelector('#sh-thoughts').value.trim();
-      if(!artistTxt){ toast('Which artist is this show for?'); return; }
-      const artistEnt = findOrCreateEntity('artist', artistTxt);
+      if(!artistNames.length){ toast('Add at least one artist for this show'); return; }
+      const artistIds = artistNames.map(function(n){ return findOrCreateEntity('artist', n).id; });
       const venueEnt = venueTxt ? findOrCreateEntity('venue', venueTxt) : null;
-      const fields = { artistId: artistEnt.id, venueId: venueEnt ? venueEnt.id : '', date: date, status: status, thoughts: thoughts };
-      if(s){ Object.assign(s, fields); }
+      const fields = { artistIds: artistIds, venueId: venueEnt ? venueEnt.id : '', date: date, status: status, thoughts: thoughts };
+      if(s){ delete s.artistId; Object.assign(s, fields); }
       else { shows.push(Object.assign({ id: 'sh'+Date.now()+Math.random().toString(36).slice(2,7), createdAt: Date.now() }, fields)); }
       overlay.remove();
       await saveEntityArray('artist');
@@ -859,10 +886,14 @@
       return;
     }
     function rowHtml(s){
-      const artist = findEntityById('artist', s.artistId);
+      const artistIds = showArtistIds(s);
+      const artistLinks = artistIds.map(function(aid){
+        const a = findEntityById('artist', aid);
+        return a ? '<button data-entity-type="artist" data-entity-id="'+esc(aid)+'" style="background:none;border:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;">'+esc(a.name)+'</button>' : null;
+      }).filter(Boolean);
       const venue = findEntityById('venue', s.venueId);
       return '<div class="writer-row">' +
-        '<div class="writer-name" style="font-size:15px;">' + (artist?'<button data-entity-type="artist" data-entity-id="'+esc(s.artistId)+'" style="background:none;border:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;">'+esc(artist.name)+'</button>':'(missing artist)') + (s.status==='upcoming'?' <span class="admin-through">UPCOMING</span>':'') + '</div>' +
+        '<div class="writer-name" style="font-size:15px;">' + (artistLinks.length?artistLinks.join(', '):'(missing artist)') + (s.status==='upcoming'?' <span class="admin-through">UPCOMING</span>':'') + '</div>' +
         '<div class="writer-count">' + esc(s.date||'') + '</div>' +
         '<div class="writer-songs">' + (venue?'<button data-entity-type="venue" data-entity-id="'+esc(s.venueId)+'" style="background:none;border:none;color:var(--teal);font:inherit;cursor:pointer;text-decoration:underline;">'+esc(venue.name)+'</button> \u00b7 ':'') + esc((s.thoughts||'').slice(0,80)) + '</div>' +
         '<button class="icon-btn" data-edit-show="'+esc(s.id)+'" type="button">edit</button>' +
@@ -1730,9 +1761,15 @@
           watchlistEntries = watchlistEntries.filter(function(w){ return w.artistId!==id; });
           await saveWatchlist();
         }
-        if(shows.some(function(s){ return s.artistId===id; })){
-          shows = shows.filter(function(s){ return s.artistId!==id; });
-          await saveShows();
+        let showsChanged = false;
+        shows.forEach(function(s){
+          const ids = showArtistIds(s);
+          if(ids.indexOf(id) !== -1){ s.artistIds = ids.filter(function(aid){ return aid!==id; }); delete s.artistId; showsChanged = true; }
+        });
+        if(showsChanged){
+          const before = shows.length;
+          shows = shows.filter(function(s){ return showArtistIds(s).length > 0; });
+          if(shows.length !== before || showsChanged){ await saveShows(); }
         }
       }
       if(type==='venue'){
