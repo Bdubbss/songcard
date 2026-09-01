@@ -22,6 +22,9 @@
     appId: "1:851833737924:web:0738b57474354381beef91"
   };
   // YOUR_FIREBASE_CONFIG_END
+  // Ticketmaster Discovery API key (their API officially supports CORS, so this
+  // is safe to use directly from the browser the way their own docs demonstrate)
+  const TICKETMASTER_API_KEY = "vhMwnanDj0zkMU2UTatLK9Go7plHrWXb";
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
@@ -210,6 +213,7 @@
   <button class="tabbtn active" id="tabSongs" type="button">Songs</button>
   <select id="browseSelect">
     <option value="">Browse…</option>
+    <option value="feed">Feed</option>
     <option value="people">People</option>
     <option value="artists">Artists</option>
     <option value="companies">Companies</option>
@@ -754,6 +758,22 @@
     return rated.sort(function(a,b){ return (b.rating||0)-(a.rating||0); })[0];
   }
 
+  // Every id generated in this app has Date.now() embedded in it, so this gives a
+  // reliable "when was this added" signal even for entity types that never got an
+  // explicit createdAt field (Artists, Releases, etc.) — no migration needed.
+  function approxCreatedAt(entity){
+    if(entity.createdAt) return entity.createdAt;
+    const m = (entity.id||'').match(/(\d{13})/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  function recentlyAddedFeed(limit){
+    const items = [];
+    entries.forEach(function(e){ items.push({ kind:'song', id:e.id, name:e.song, sub: artistName(e), when: approxCreatedAt(e) }); });
+    albums.forEach(function(a){ items.push({ kind:'release', id:a.id, name:a.title, sub: releaseArtistName(a), when: approxCreatedAt(a) }); });
+    artists.forEach(function(a){ items.push({ kind:'artist', id:a.id, name:a.name, sub:'', when: approxCreatedAt(a) }); });
+    return items.filter(function(i){ return i.when; }).sort(function(a,b){ return b.when-a.when; }).slice(0, limit||15);
+  }
+
   // ===== Shows: a specific artist at a specific venue on a specific date =====
   async function saveShows(){
     await syncNormalizedCollection('shows', shows);
@@ -774,7 +794,10 @@
   function showsSectionHtml(type, id){
     const list = type==='venue' ? showsForVenue(id) : showsForArtist(id);
     let html = '<div class="stat-tile" style="margin-bottom:18px;">' +
-      '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">Shows</div><button class="icon-btn" id="addShowBtn" type="button">+ add</button></div>';
+      '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;"><div class="writers-label">Shows</div><div style="display:flex; gap:8px;">' +
+      (type==='artist' ? '<button class="icon-btn" id="checkTicketmasterBtn" type="button">check Ticketmaster</button>' : '') +
+      '<button class="icon-btn" id="addShowBtn" type="button">+ add</button>' +
+      '</div></div>';
     if(list.length){
       html += '<div class="writer-index" style="margin-top:4px;">' + list.map(function(s){
         const artistIds = showArtistIds(s);
@@ -915,6 +938,60 @@
         entityFilterType = el.getAttribute('data-entity-type');
         entityFilterId = el.getAttribute('data-entity-id');
         view = 'entityFilter'; render();
+      });
+    });
+  }
+
+  function renderFeed(){
+    const upcoming = shows.filter(function(s){ return s.status==='upcoming'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    const recent = recentlyAddedFeed(15);
+    let html = '<div class="stats-section"><h3>Upcoming shows</h3></div>';
+    if(upcoming.length){
+      html += '<div class="writer-index">' + upcoming.map(function(s){
+        const artistLinks = showArtistIds(s).map(function(aid){
+          const a = findEntityById('artist', aid);
+          return a ? '<button data-entity-type="artist" data-entity-id="'+esc(aid)+'" style="background:none;border:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;">'+esc(a.name)+'</button>' : null;
+        }).filter(Boolean);
+        const venue = findEntityById('venue', s.venueId);
+        return '<div class="writer-row" data-edit-show="'+esc(s.id)+'" style="cursor:pointer;">' +
+          '<div class="writer-name" style="font-size:15px;">' + esc(s.date||'(no date)') + '</div>' +
+          '<div class="writer-count">' + (artistLinks.length?artistLinks.join(', '):'(missing artist)') + '</div>' +
+          '<div class="writer-songs">' + (venue?esc(venue.name):'') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div class="empty"><strong>No upcoming shows logged</strong>Add one from an Artist or Venue profile, or from the Shows tab.</div>';
+    }
+    html += '<div class="stats-section"><h3>Recently added to your sheet</h3></div>';
+    if(recent.length){
+      html += '<div class="writer-index">' + recent.map(function(i){
+        return '<div class="writer-row" data-feed-open="' + i.kind + '|' + esc(i.id) + '" style="cursor:pointer;">' +
+          '<div class="writer-name" style="font-size:15px;">' + esc(i.name) + ' <span class="admin-through">'+i.kind.toUpperCase()+'</span></div>' +
+          '<div class="writer-count">' + new Date(i.when).toLocaleDateString() + '</div>' +
+          '<div class="writer-songs">' + esc(i.sub||'') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div class="writers-label" style="font-style:italic;">Nothing logged yet.</div>';
+    }
+    mainEl.innerHTML = html;
+    mainEl.querySelectorAll('[data-edit-show]').forEach(function(row){
+      row.addEventListener('click', function(){ openShowModal(row.getAttribute('data-edit-show')); });
+    });
+    mainEl.querySelectorAll('[data-entity-type]').forEach(function(el){
+      el.addEventListener('click', function(){
+        entityFilterType = el.getAttribute('data-entity-type');
+        entityFilterId = el.getAttribute('data-entity-id');
+        view = 'entityFilter'; render();
+      });
+    });
+    mainEl.querySelectorAll('[data-feed-open]').forEach(function(el){
+      el.addEventListener('click', function(){
+        const parts = el.getAttribute('data-feed-open').split('|');
+        const kind = parts[0], fid = parts[1];
+        if(kind==='song') openModal(fid);
+        else if(kind==='release'){ albumFilterId = fid; view='albumFilter'; render(); }
+        else if(kind==='artist'){ entityFilterType='artist'; entityFilterId=fid; view='entityFilter'; render(); }
       });
     });
   }
@@ -1077,6 +1154,163 @@
       if(r['target-type']==='label' && r.label && r.label.name){ label = r.label.name; }
     });
     return label;
+  }
+
+  // ===== MusicBrainz artist enrichment (discography, tags, related artists) =====
+  async function mbSearchArtist(name){
+    const url = 'https://musicbrainz.org/ws/2/artist/?query=' + encodeURIComponent('artist:"' + name.replace(/"/g,'') + '"') + '&fmt=json&limit=5';
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('artist search failed');
+    const data = await res.json();
+    if(!data.artists || !data.artists.length) return null;
+    return data.artists[0];
+  }
+  async function mbGetArtistDetail(mbid){
+    const url = 'https://musicbrainz.org/ws/2/artist/' + mbid + '?inc=tags+artist-rels&fmt=json';
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('artist detail failed');
+    return res.json();
+  }
+  async function mbGetDiscography(mbid){
+    const url = 'https://musicbrainz.org/ws/2/release-group?artist=' + mbid + '&fmt=json&limit=25';
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('discography failed');
+    const data = await res.json();
+    return (data['release-groups']||[])
+      .map(function(rg){ return { title: rg.title, date: rg['first-release-date']||'', type: (rg['primary-type']||'').toLowerCase() }; })
+      .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  }
+  async function runArtistEnrichment(artistEnt, statusEl){
+    statusEl.textContent = 'Looking up on MusicBrainz\u2026';
+    try{
+      const found = await mbSearchArtist(artistEnt.name);
+      if(!found){ statusEl.textContent = 'No confident match found on MusicBrainz.'; return false; }
+      const detail = await mbGetArtistDetail(found.id);
+      const discography = await mbGetDiscography(found.id);
+      artistEnt.mbTags = (detail.tags||[]).sort(function(a,b){ return (b.count||0)-(a.count||0); }).slice(0,8).map(function(t){ return t.name; });
+      artistEnt.mbCountry = detail.country || '';
+      artistEnt.mbLifeSpan = detail['life-span'] ? ((detail['life-span'].begin||'') + (detail['life-span'].end ? '\u2013'+detail['life-span'].end : (detail['life-span'].ended===false ? '\u2013present' : ''))) : '';
+      artistEnt.mbRelated = (detail.relations||[]).filter(function(r){ return r.artist && r.artist.name; }).map(function(r){ return r.artist.name; }).filter(function(n,i,arr){ return arr.indexOf(n)===i; }).slice(0,10);
+      artistEnt.mbDiscography = discography;
+      artistEnt.mbFetchedAt = Date.now();
+      await saveEntityArray('artist');
+      statusEl.textContent = 'Updated from MusicBrainz.';
+      return true;
+    }catch(err){
+      statusEl.textContent = 'Lookup failed \u2014 MusicBrainz may be unreachable right now.';
+      return false;
+    }
+  }
+
+  // ===== Ticketmaster: on-demand check for an artist's upcoming shows =====
+  async function fetchTicketmasterShows(artistName){
+    const url = 'https://app.ticketmaster.com/discovery/v2/events.json' +
+      '?keyword=' + encodeURIComponent(artistName) +
+      '&classificationName=music&sort=date,asc&size=20' +
+      '&apikey=' + TICKETMASTER_API_KEY;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Ticketmaster request failed: ' + res.status);
+    const data = await res.json();
+    const events = (data._embedded && data._embedded.events) || [];
+    return events.map(function(e){
+      const venue = e._embedded && e._embedded.venues && e._embedded.venues[0];
+      return {
+        id: e.id,
+        name: e.name,
+        date: e.dates && e.dates.start && e.dates.start.localDate,
+        time: e.dates && e.dates.start && e.dates.start.localTime,
+        venueName: venue ? venue.name : '',
+        city: (venue && venue.city) ? venue.city.name : ''
+      };
+    });
+  }
+
+  function openTicketmasterModal(artistEnt){
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">' +
+        '<h2>Ticketmaster: ' + esc(artistEnt.name) + '</h2>' +
+        '<div class="lookup-status" id="tmModalStatus">Checking Ticketmaster\u2026</div>' +
+        '<div id="tmResults" style="margin-top:8px;"></div>' +
+        '<div class="modal-actions"><button class="btn btn-ghost" id="tmCloseBtn" type="button">Close</button></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#tmCloseBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+
+    const existingTmIds = new Set(shows.filter(function(s){ return s.ticketmasterEventId; }).map(function(s){ return s.ticketmasterEventId; }));
+
+    fetchTicketmasterShows(artistEnt.name).then(function(results){
+      const statusEl = overlay.querySelector('#tmModalStatus');
+      if(!results.length){ statusEl.textContent = 'No upcoming Ticketmaster events found for "' + artistEnt.name + '".'; return; }
+      statusEl.textContent = results.length + ' event' + (results.length===1?'':'s') + ' found:';
+      const resultsEl = overlay.querySelector('#tmResults');
+      resultsEl.innerHTML = results.map(function(r){
+        const already = existingTmIds.has(r.id);
+        return '<div class="writer-row" style="cursor:default;">' +
+          '<div class="writer-name" style="font-size:14px;">' + esc(r.date||'') + (r.time ? ' ' + esc(r.time.slice(0,5)) : '') + '</div>' +
+          '<div class="writer-songs">' + esc(r.venueName||'') + (r.city ? ', ' + esc(r.city) : '') + '</div>' +
+          (already
+            ? '<span class="admin-through">ALREADY ADDED</span>'
+            : '<button class="link-btn" data-add-tm-show="' + esc(r.id) + '" type="button">+ Add to Shows</button>') +
+        '</div>';
+      }).join('');
+      resultsEl.querySelectorAll('[data-add-tm-show]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          const r = results.find(function(x){ return x.id===btn.getAttribute('data-add-tm-show'); });
+          if(!r) return;
+          const venueEnt = r.venueName ? findOrCreateEntity('venue', r.venueName) : null;
+          shows.push({
+            id: 'sh'+Date.now()+Math.random().toString(36).slice(2,7),
+            artistIds: [artistEnt.id],
+            venueId: venueEnt ? venueEnt.id : '',
+            date: r.date || '',
+            status: 'upcoming',
+            thoughts: '',
+            ticketmasterEventId: r.id,
+            createdAt: Date.now()
+          });
+          if(venueEnt){ await saveEntityArray('venue'); }
+          await saveShows();
+          toast('Show added from Ticketmaster');
+          btn.outerHTML = '<span class="admin-through">ADDED</span>';
+          render();
+        });
+      });
+    }).catch(function(err){
+      overlay.querySelector('#tmModalStatus').textContent = 'Couldn\u2019t reach Ticketmaster right now \u2014 try again in a moment.';
+    });
+  }
+
+  function artistEnrichmentSectionHtml(ent){
+    let html = '<div class="stat-tile" style="margin-bottom:18px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center;"><div class="writers-label">More info (MusicBrainz)</div><button class="icon-btn" id="lookupArtistInfoBtn" type="button">' + (ent.mbFetchedAt ? 'refresh' : 'look up') + '</button></div>' +
+      '<div class="lookup-status" id="artistInfoStatus" style="margin-top:4px;"></div>';
+    if(ent.mbCountry || ent.mbLifeSpan){
+      html += '<div class="publisher" style="margin-top:6px;">' + esc(ent.mbCountry||'') + (ent.mbCountry&&ent.mbLifeSpan?' \u00b7 ':'') + esc(ent.mbLifeSpan||'') + '</div>';
+    }
+    if((ent.mbTags||[]).length){
+      html += '<div class="chip-row" style="margin-top:8px;">' + ent.mbTags.map(function(t){ return '<span class="chip chip-tag">'+esc(t)+'</span>'; }).join('') + '</div>';
+    }
+    if((ent.mbRelated||[]).length){
+      html += '<div class="writers-label" style="margin-top:10px;">Related artists</div>';
+      html += '<div class="chip-row" style="margin-top:4px;">' + ent.mbRelated.map(function(n){
+        const existing = artists.find(function(a){ return a.name.toLowerCase()===n.toLowerCase(); });
+        return existing ? '<button class="chip" data-entity-type="artist" data-entity-id="'+esc(existing.id)+'">'+esc(n)+'</button>' : '<span class="chip" style="cursor:default;">'+esc(n)+'</span>';
+      }).join('') + '</div>';
+    }
+    if((ent.mbDiscography||[]).length){
+      html += '<div class="writers-label" style="margin-top:10px;">Discography</div>';
+      html += '<div class="thoughts" style="margin-top:4px;">' + ent.mbDiscography.slice(0,12).map(function(d){ return esc(d.title) + (d.date?' ('+esc(d.date.slice(0,4))+')':''); }).join(' \u00b7 ') + '</div>';
+    }
+    if(ent.mbFetchedAt){
+      html += '<div class="writers-label" style="margin-top:8px; font-style:italic;">Last checked ' + new Date(ent.mbFetchedAt).toLocaleDateString() + '</div>';
+    } else {
+      html += '<div class="writers-label" style="margin-top:6px; font-style:italic;">Not looked up yet. Coverage is spotty for smaller artists.</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function setCreditRows(overlay, names){
@@ -1389,6 +1623,7 @@
     else if(view==='inbox'){ browseVal = 'inbox'; }
     else if(view==='watchlist'){ browseVal = 'watchlist'; }
     else if(view==='shows'){ browseVal = 'shows'; }
+    else if(view==='feed'){ browseVal = 'feed'; }
     else if(view==='stats'){ browseVal = 'stats'; }
     browseSelect.value = browseVal;
     const inboxOpt = document.getElementById('inboxOption');
@@ -1409,6 +1644,7 @@
     if(view === 'inbox'){ renderInbox(); return; }
     if(view === 'watchlist'){ renderWatchlist(); return; }
     if(view === 'shows'){ renderShows(); return; }
+    if(view === 'feed'){ renderFeed(); return; }
     if(view === 'stats'){ renderStats(); return; }
     renderSongs(q);
   }
@@ -1624,6 +1860,7 @@
       }
     }
     if(type==='artist'){ html += watchlistSectionHtml(id); }
+    if(type==='artist'){ html += artistEnrichmentSectionHtml(ent); }
     if(type==='artist' || type==='venue'){ html += showsSectionHtml(type, id); }
     html += notesSectionHtml(type, id);
     if(type==='company' && (ent.companyTypes||[]).indexOf('publisher')!==-1){
@@ -1679,6 +1916,19 @@
     mainEl.querySelectorAll('[data-edit-snapshot]').forEach(function(row){
       row.addEventListener('click', function(){ openSnapshotModal(id, row.getAttribute('data-edit-snapshot')); });
     });
+    if(document.getElementById('lookupArtistInfoBtn')){
+      document.getElementById('lookupArtistInfoBtn').addEventListener('click', async function(){
+        const btn = this;
+        const statusEl = document.getElementById('artistInfoStatus');
+        btn.disabled = true;
+        const ok = await runArtistEnrichment(ent, statusEl);
+        btn.disabled = false;
+        if(ok) render();
+      });
+    }
+    if(document.getElementById('checkTicketmasterBtn')){
+      document.getElementById('checkTicketmasterBtn').addEventListener('click', function(){ openTicketmasterModal(ent); });
+    }
     if(document.getElementById('addShowBtn')){
       document.getElementById('addShowBtn').addEventListener('click', function(){
         if(type==='venue'){ openShowModal(null, null, id); }
@@ -3222,6 +3472,7 @@
     else if(v==='inbox'){ view='inbox'; }
     else if(v==='watchlist'){ view='watchlist'; }
     else if(v==='shows'){ view='shows'; }
+    else if(v==='feed'){ view='feed'; }
     else if(v==='stats'){ view='stats'; }
     else { return; }
     render();
