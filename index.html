@@ -25,158 +25,178 @@
   // Ticketmaster Discovery API key (their API officially supports CORS, so this
   // is safe to use directly from the browser the way their own docs demonstrate)
   const TICKETMASTER_API_KEY = "vhMwnanDj0zkMU2UTatLK9Go7plHrWXb";
+  // Your own backend server — handles Spotify (needs a secret) and Last.fm stats.
+  const SERVER_BASE_URL = "http://134.209.219.173:3000";
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --kraft:#e8e0cd; --kraft-deep:#d8cbac; --card:#f8f4e6;
-    --ink:#211d18; --ink-soft:#5c5346; --brown:#8a5a34; --brown-deep:#6b4526;
-    --stamp:#a13b2e; --teal:#33625a; --gold:#b8873f; --line: rgba(33,29,24,0.16);
-    --radius: 3px;
+    /* structure */
+    --kraft:#FAF8F3; --kraft-deep:#F0EBDD; --card:#FFFFFF; --card-raised:#FFFFFF;
+    --border: #E6E1D3; --border-strong: #D2CAB4; --line: #EAE5D8;
+    /* text */
+    --ink:#18160F; --ink-soft:#6B6656; --ink-faint:#A29B87;
+    /* accents */
+    --amber:#A67A22; --amber-deep:#835F19; --teal:#2955D6; --teal-deep:#1E3FA8;
+    --stamp:#B23B2E; --gold:#A67A22; --brown:#A29B87; --brown-deep:#6B6656;
+    --radius: 10px; --radius-sm: 6px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background: radial-gradient(ellipse at top left, rgba(255,255,255,0.35), transparent 60%), var(--kraft);
+    background: var(--kraft);
     color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;
+    font-feature-settings:"tnum" 1;
   }
-  body::before{
-    content:""; position:fixed; inset:0; pointer-events:none; opacity:0.05;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    mix-blend-mode:multiply; z-index:0;
-  }
-  header{position:relative; z-index:1; padding:28px 20px 18px; max-width:1120px; margin:0 auto;}
-  .masthead{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom:3px solid var(--ink); padding-bottom:10px;}
-  .brand{font-family:'Roboto Slab',serif; font-weight:900; font-size:clamp(28px,5vw,42px); letter-spacing:0.5px; display:flex; align-items:baseline; gap:10px;}
-  .brand .card-icon{display:inline-block; width:0.62em; height:0.8em; border:2px solid var(--ink); border-radius:1px; position:relative; top:0.04em;
-    background: linear-gradient(var(--ink) 0 0) 12% 30%/76% 2px no-repeat, linear-gradient(var(--ink) 0 0) 12% 52%/50% 2px no-repeat;}
-  .tagline{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.08em; color:var(--ink-soft); text-transform:uppercase;}
-  .stats-row{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-top:8px; letter-spacing:0.03em;}
-  .controls{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 20px 10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
-  .capture-bar{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 20px 14px; display:flex; gap:10px;}
-  .capture-bar input{flex:1; padding:13px 16px; border:2px solid var(--stamp); border-radius:var(--radius); background:var(--card); font-family:'Inter',sans-serif; font-size:14px; color:var(--ink);}
-  .capture-bar input:focus{outline:none; box-shadow:0 0 0 3px rgba(161,59,46,0.15);}
+  body::before{ content:none; }
+  header{position:relative; z-index:1; padding:22px 20px 16px; max-width:1180px; margin:0 auto;}
+  .masthead{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom:1px solid var(--border); padding-bottom:14px;}
+  .brand{font-family:'Newsreader',serif; font-weight:700; font-size:20px; letter-spacing:-0.01em; display:flex; align-items:center; gap:9px; color:var(--ink);}
+  .brand .card-icon{display:inline-block; width:16px; height:16px; border-radius:4px; position:relative;
+    background: linear-gradient(135deg, var(--amber), var(--amber-deep));}
+  .tagline{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-faint); font-weight:500;}
+  .stats-row{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-soft); margin-top:9px; font-variant-numeric:tabular-nums;}
+  .controls{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 20px 12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .capture-bar{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:14px 20px 14px; display:flex; gap:10px;}
+  .capture-bar input{flex:1; padding:13px 16px; border:1px solid var(--border-strong); border-radius:var(--radius); background:var(--card); font-family:'Inter',sans-serif; font-size:14px; color:var(--ink);}
+  .capture-bar input::placeholder{color:var(--ink-faint);}
+  .capture-bar input:focus{outline:none; border-color:var(--amber); box-shadow:0 0 0 3px rgba(232,162,61,0.15);}
   .capture-bar .btn-add{margin-left:0;}
   @media (max-width:520px){ .capture-bar{flex-direction:column;} }
   .search-wrap{flex:1 1 220px; position:relative;}
-  .search-wrap input{width:100%; padding:11px 14px 11px 34px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);}
-  .search-wrap input:focus{outline:2px solid var(--teal); outline-offset:1px;}
-  .search-wrap svg{position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.55;}
-  select#sortSelect, select#browseSelect{font-family:'IBM Plex Mono',monospace; font-size:12px; padding:9px 10px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); color:var(--ink);}
-  .tabbtn{font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:0.03em; padding:9px 12px; border:1.5px solid var(--ink); border-radius:var(--radius); background:transparent; color:var(--ink); cursor:pointer; text-transform:uppercase;}
-  .tabbtn.active{background:var(--ink); color:var(--card);}
-  .tabbtn.toggle-on{background:var(--teal); color:#fbf6e9; border-color:var(--teal);}
-  .tabbtn.toggle-on.priority-on{background:var(--stamp); border-color:var(--stamp);}
-  .tabbtn:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
-  .btn-add{margin-left:auto; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px; padding:11px 18px; border-radius:var(--radius); border:1.5px solid var(--ink); background:var(--stamp); color:#fbf6e9; cursor:pointer; letter-spacing:0.03em;}
-  .btn-add:hover{background:#8b2f24;}
-  main{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:14px 20px 80px;}
-  .empty{border:1.5px dashed var(--ink-soft); border-radius:var(--radius); padding:48px 20px; text-align:center; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:13px;}
-  .empty strong{display:block; font-family:'Roboto Slab',serif; font-size:20px; color:var(--ink); margin-bottom:6px;}
-  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px 14px; margin-top:16px;}
-  .tree-toggle{background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink-soft); width:16px; flex:0 0 16px; text-align:center; padding:0;}
+  .search-wrap input{width:100%; padding:10px 14px 10px 34px; border:1px solid var(--border); border-radius:var(--radius); background:var(--card); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);}
+  .search-wrap input::placeholder{color:var(--ink-faint);}
+  .search-wrap input:focus{outline:none; border-color:var(--teal);}
+  .search-wrap svg{position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.5; color:var(--ink-soft);}
+  select#sortSelect, select#browseSelect{font-family:'Inter',sans-serif; font-weight:500; font-size:13px; padding:9px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--card); color:var(--ink);}
+  .tabbtn{font-family:'Inter',sans-serif; font-weight:500; font-size:13px; padding:9px 13px; border:1px solid var(--border); border-radius:var(--radius); background:var(--card); color:var(--ink-soft); cursor:pointer; transition:border-color 0.15s, color 0.15s;}
+  .tabbtn:hover{border-color:var(--border-strong); color:var(--ink);}
+  .tabbtn.active{background:var(--ink); color:var(--kraft); border-color:var(--ink);}
+  .tabbtn.toggle-on{background:rgba(124,147,184,0.16); color:var(--teal-deep); border-color:var(--teal);}
+  .tabbtn.toggle-on.priority-on{background:rgba(232,162,61,0.16); color:var(--amber); border-color:var(--amber);}
+  .tabbtn:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+  .btn-add{margin-left:auto; font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; padding:11px 18px; border-radius:var(--radius); border:1px solid var(--amber); background:var(--amber); color:#1A1204; cursor:pointer; transition:background 0.15s, border-color 0.15s;}
+  .btn-add{color:#FFF9EE;}
+  .btn-add:hover{background:var(--amber-deep); border-color:var(--amber-deep);}
+  main{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:8px 20px 90px;}
+  .empty{border:1px dashed var(--border-strong); border-radius:var(--radius); padding:52px 20px; text-align:center; color:var(--ink-soft); font-family:'Inter',sans-serif; font-size:13.5px;}
+  .empty strong{display:block; font-family:'Newsreader',serif; font-weight:600; font-size:19px; color:var(--ink); margin-bottom:7px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; margin-top:16px;}
+  .tree-toggle{background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink-faint); width:16px; flex:0 0 16px; text-align:center; padding:0;}
   .tree-toggle:hover{color:var(--ink);}
   .tree-toggle-spacer{display:inline-block; width:16px; flex:0 0 16px;}
-  .admin-through{font-size:10px; opacity:0.75;}
-  .card{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); position:relative; box-shadow:2px 2px 0 rgba(33,29,24,0.14); padding:18px 14px 14px; display:flex; flex-direction:column; gap:8px;}
-  .card.is-priority{border-color:var(--stamp); box-shadow:3px 3px 0 rgba(161,59,46,0.28);}
-  .card .tab{position:absolute; top:-13px; left:16px; background:var(--brown); color:#fbf6e9; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; padding:3px 9px; border-radius:2px; border:1.5px solid var(--ink);}
-  .punch{position:absolute; top:9px; right:14px; width:8px; height:8px; border-radius:50%; background:var(--kraft); border:1px solid var(--line);}
-  .flag-row{position:absolute; top:5px; right:26px; display:flex; gap:5px; flex-direction:column; align-items:flex-end;}
-  .stamp-mark{font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:9px; border-radius:3px; padding:2px 6px; transform:rotate(6deg); letter-spacing:0.05em; white-space:nowrap;}
-  .stamp-revisit{color:var(--teal); border:1.5px solid var(--teal);}
-  .stamp-priority{color:var(--stamp); border:1.5px solid var(--stamp); transform:rotate(-4deg); background:rgba(161,59,46,0.06);}
-  .song-title{font-family:'Roboto Slab',serif; font-weight:700; font-size:19px; line-height:1.2; margin-top:6px; padding-right:6px;}
-  .artist{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; background:none; border:none; padding:0; text-align:left; cursor:pointer;}
-  .artist:hover{color:var(--brown-deep); text-decoration:underline;}
-  .publisher{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
-  .publisher button{background:none; border:none; font-family:inherit; font-size:inherit; color:var(--teal); cursor:pointer; padding:0; text-decoration:underline;}
-  .stars{color:var(--gold); font-size:15px; letter-spacing:1px;}
-  .divider{border:none; border-top:1px dashed var(--line); margin:2px 0;}
-  .writers-label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.1em; color:var(--ink-soft); text-transform:uppercase;}
+  .admin-through{font-size:10.5px; color:var(--ink-faint); font-weight:500;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); position:relative; padding:16px 15px 14px; display:flex; flex-direction:column; gap:8px; transition:border-color 0.15s, transform 0.15s; }
+  .card:hover{border-color:var(--border-strong);}
+  .card.is-priority{border-color:rgba(166,122,34,0.55); box-shadow:0 0 0 1px rgba(166,122,34,0.15);}
+  .card .tab{position:absolute; top:-10px; left:15px; background:var(--card-raised); color:var(--ink-soft); font-family:'Inter',sans-serif; font-weight:600; font-size:10px; letter-spacing:0.02em; padding:3px 9px; border-radius:20px; border:1px solid var(--border-strong);}
+  .punch{position:absolute; top:12px; right:14px; width:6px; height:6px; border-radius:50%; background:var(--card-raised); border:1px solid var(--border);}
+  .flag-row{position:absolute; top:10px; right:24px; display:flex; gap:5px; flex-direction:column; align-items:flex-end;}
+  .stamp-mark{font-family:'Inter',sans-serif; font-weight:600; font-size:9.5px; border-radius:20px; padding:2px 8px; letter-spacing:0.02em; white-space:nowrap;}
+  .stamp-revisit{color:var(--teal-deep); border:1px solid var(--teal); background:rgba(124,147,184,0.12);}
+  .stamp-priority{color:var(--amber); border:1px solid var(--amber); background:rgba(232,162,61,0.12);}
+  .song-title{font-family:'Newsreader',serif; font-weight:600; font-size:17px; line-height:1.25; margin-top:4px; padding-right:6px; letter-spacing:-0.005em;}
+  .artist{font-family:'Inter',sans-serif; font-weight:500; font-size:13px; color:var(--ink-soft); background:none; border:none; padding:0; text-align:left; cursor:pointer;}
+  .artist:hover{color:var(--amber); }
+  .publisher{font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-soft);}
+  .publisher button{background:none; border:none; font-family:inherit; font-size:inherit; color:var(--teal-deep); cursor:pointer; padding:0;}
+  .publisher button:hover{text-decoration:underline;}
+  .stars{color:var(--amber); font-size:14px; letter-spacing:1px;}
+  .divider{border:none; border-top:1px solid var(--line); margin:2px 0;}
+  .writers-label{font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--ink-faint); letter-spacing:0.02em;}
   .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
-  .chip{font-family:'IBM Plex Mono',monospace; font-size:11.5px; background:transparent; border:1px solid var(--brown); color:var(--brown-deep); padding:3px 8px; border-radius:12px; cursor:pointer;}
-  .chip:hover{background:var(--brown); color:#fbf6e9;}
-  .chip-tag{border-color:var(--teal); color:var(--teal);}
-  .chip-tag:hover{background:var(--teal); color:#fbf6e9;}
-  .chip-pub{border-style:dashed; font-size:10.5px;}
-  .thoughts{font-size:13.5px; line-height:1.45; color:var(--ink); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
-  .thoughts.empty-thought{color:var(--ink-soft); font-style:italic;}
+  .chip{font-family:'Inter',sans-serif; font-weight:500; font-size:12px; background:var(--card-raised); border:1px solid var(--border); color:var(--ink-soft); padding:4px 10px; border-radius:20px; cursor:pointer; transition:border-color 0.15s, color 0.15s;}
+  .chip:hover{border-color:var(--border-strong); color:var(--ink);}
+  .chip-tag{border-color:rgba(124,147,184,0.4); color:var(--teal-deep);}
+  .chip-tag:hover{border-color:var(--teal); background:rgba(124,147,184,0.1);}
+  .chip-pub{border-style:dashed; font-size:11px;}
+  .thoughts{font-size:13.5px; line-height:1.5; color:var(--ink-soft); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
+  .thoughts.empty-thought{color:var(--ink-faint); font-style:italic;}
   .card-foot{margin-top:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:6px;}
-  .link-btn{font-family:'IBM Plex Mono',monospace; font-size:11px; border:1px solid var(--teal); color:var(--teal); background:transparent; padding:4px 8px; border-radius:2px; text-decoration:none; cursor:pointer;}
-  .link-btn:hover{background:var(--teal); color:#fbf6e9;}
-  .icon-btn{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px; text-decoration:underline;}
-  .icon-btn:hover{color:var(--stamp);}
+  .link-btn{font-family:'Inter',sans-serif; font-weight:500; font-size:12px; border:1px solid rgba(124,147,184,0.4); color:var(--teal-deep); background:transparent; padding:5px 9px; border-radius:var(--radius-sm); text-decoration:none; cursor:pointer; transition:border-color 0.15s, background 0.15s;}
+  .link-btn:hover{border-color:var(--teal); background:rgba(124,147,184,0.1);}
+  .icon-btn{background:none; border:none; color:var(--ink-faint); cursor:pointer; font-family:'Inter',sans-serif; font-weight:500; font-size:12px;}
+  .icon-btn:hover{color:var(--amber);}
   .icon-btn.push-right{margin-left:auto;}
-  .writer-index{margin-top:18px; display:flex; flex-direction:column; gap:0;}
-  .writer-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 4px; border-bottom:1px solid var(--line); cursor:pointer;}
-  .writer-row:hover{background:rgba(138,90,52,0.07);}
-  .writer-row.tag-row:hover{background:rgba(51,98,90,0.08);}
-  .writer-name{font-family:'Roboto Slab',serif; font-weight:700; font-size:17px; min-width:180px;}
-  .writer-count{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft);}
-  .writer-songs{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); flex:1;}
+  .writer-index{margin-top:16px; display:flex; flex-direction:column; gap:0;}
+  .writer-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 6px; border-bottom:1px solid var(--line); cursor:pointer; transition:background 0.12s;}
+  .writer-row:hover{background:var(--card);}
+  .writer-row.tag-row:hover{background:var(--card);}
+  .writer-name{font-family:'Newsreader',serif; font-weight:600; font-size:15.5px; min-width:180px; color:var(--ink);}
+  .writer-count{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+  .writer-songs{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-soft); flex:1;}
   .writer-links{display:flex; gap:6px;}
-  .back-link{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal); background:none; border:none; cursor:pointer; text-decoration:underline; padding:0; margin-bottom:10px;}
-  .filter-banner{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-bottom:6px;}
-  .stats-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-top:18px;}
-  .stat-tile{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); padding:16px; box-shadow:3px 3px 0 rgba(33,29,24,0.14);}
+  .back-link{font-family:'Inter',sans-serif; font-weight:500; font-size:13px; color:var(--teal-deep); background:none; border:none; cursor:pointer; padding:0; margin-bottom:12px;}
+  .back-link:hover{text-decoration:underline;}
+  .filter-banner{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-faint); margin-bottom:8px;}
+  .stats-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:18px;}
+  .stat-tile{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;}
   .entity-header{display:flex; gap:16px; align-items:flex-start;}
-  .entity-photo{width:96px; height:96px; object-fit:cover; border-radius:4px; border:1.5px solid var(--ink); background:var(--kraft); flex-shrink:0;}
-  .entity-photo-placeholder{width:96px; height:96px; border-radius:4px; border:1.5px dashed var(--ink-soft); background:var(--kraft); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); text-align:center; padding:6px;}
-  .stat-num{font-family:'Roboto Slab',serif; font-weight:900; font-size:32px; line-height:1;}
-  .stat-label{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); text-transform:uppercase; margin-top:4px; letter-spacing:0.05em;}
-  .stats-section{margin-top:26px;}
-  .stats-section h3{font-family:'Roboto Slab',serif; font-size:16px; border-bottom:2px solid var(--ink); padding-bottom:6px; margin-bottom:10px;}
-  .rank-row{display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 2px; border-bottom:1px dashed var(--line);}
-  .overlay{position:fixed; inset:0; background:rgba(33,29,24,0.55); z-index:10; display:flex; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;}
-  .modal{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); max-width:520px; width:100%; padding:24px; box-shadow:5px 5px 0 rgba(33,29,24,0.25); margin:auto;}
-  .modal h2{font-family:'Roboto Slab',serif; font-size:22px; margin:0 0 4px;}
-  .modal .sub{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-bottom:18px; text-transform:uppercase; letter-spacing:0.06em;}
+  .entity-photo{width:88px; height:88px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--border-strong); background:var(--card-raised); flex-shrink:0;}
+  .entity-photo-placeholder{width:88px; height:88px; border-radius:var(--radius); border:1px dashed var(--border-strong); background:var(--card-raised); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:'Inter',sans-serif; font-size:10px; color:var(--ink-faint); text-align:center; padding:6px;}
+  .stat-num{font-family:'Newsreader',serif; font-weight:700; font-size:30px; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .stat-label{font-family:'Inter',sans-serif; font-size:11.5px; font-weight:500; color:var(--ink-faint); margin-top:5px;}
+  .stats-section{margin-top:28px;}
+  .stats-section h3{font-family:'Newsreader',serif; font-weight:600; font-size:15.5px; color:var(--ink); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:10px;}
+  .rank-row{display:flex; justify-content:space-between; font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-soft); padding:8px 2px; border-bottom:1px solid var(--line);}
+  .overlay{position:fixed; inset:0; background:rgba(24,22,15,0.55); z-index:10; display:flex; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;}
+  .modal{background:var(--card-raised); border:1px solid var(--border-strong); border-radius:12px; max-width:520px; width:100%; padding:26px; box-shadow:0 20px 50px rgba(24,22,15,0.16); margin:auto;}
+  .modal h2{font-family:'Newsreader',serif; font-weight:600; font-size:21px; color:var(--ink); margin:0 0 5px;}
+  .modal .sub{font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-faint); margin-bottom:18px;}
   .field{margin-bottom:14px;}
   .field-row{display:flex; gap:10px;}
   .field-row .field{flex:1;}
-  .field label{display:block; font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:5px;}
-  .field input, .field textarea{width:100%; padding:9px 10px; border:1.5px solid var(--ink); border-radius:2px; font-family:'Inter',sans-serif; font-size:14px; background:#fffdf7; color:var(--ink);}
+  .field label{display:block; font-family:'Inter',sans-serif; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;}
+  .field input, .field textarea{width:100%; padding:9px 11px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); font-family:'Inter',sans-serif; font-size:14px; background:var(--kraft); color:var(--ink);}
+  .field input::placeholder, .field textarea::placeholder{color:var(--ink-faint);}
+  .field input:focus, .field textarea:focus, .field select:focus{outline:none; border-color:var(--amber);}
   .field textarea{resize:vertical; min-height:64px; font-family:'Inter',sans-serif;}
-  .field .hint{font-size:11px; color:var(--ink-soft); margin-top:4px; font-family:'IBM Plex Mono',monospace;}
-  .lookup-box{border:1.5px dashed var(--brown); border-radius:2px; padding:12px; margin-bottom:16px; background:rgba(138,90,52,0.05);}
-  .lookup-box .lookup-title{font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brown-deep); margin-bottom:8px;}
+  .field select{width:100%; padding:9px 11px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); font-family:'Inter',sans-serif; font-size:14px; background:var(--kraft); color:var(--ink);}
+  .field .hint{font-size:11.5px; color:var(--ink-faint); margin-top:5px; font-family:'Inter',sans-serif;}
+  .lookup-box{border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px; background:var(--kraft);}
+  .lookup-box .lookup-title{font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:8px;}
   .lookup-row{display:flex; gap:8px; align-items:stretch; margin-bottom:8px; flex-wrap:wrap;}
-  .lookup-row input{flex:1; min-width:120px; padding:8px 9px; border:1.5px solid var(--ink); border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:13px; background:#fffdf7;}
-  .lookup-btn{font-family:'IBM Plex Mono',monospace; font-size:11.5px; white-space:nowrap; border:1.5px solid var(--brown); background:transparent; color:var(--brown-deep); padding:8px 10px; border-radius:2px; cursor:pointer;}
-  .lookup-btn:hover{background:var(--brown); color:#fbf6e9;}
+  .lookup-row input{flex:1; min-width:120px; padding:8px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); font-family:'Inter',sans-serif; font-size:13px; background:var(--card-raised); color:var(--ink);}
+  .lookup-btn{font-family:'Inter',sans-serif; font-weight:500; font-size:12px; white-space:nowrap; border:1px solid var(--border-strong); background:transparent; color:var(--ink-soft); padding:8px 11px; border-radius:var(--radius-sm); cursor:pointer; transition:border-color 0.15s, color 0.15s;}
+  .lookup-btn:hover{border-color:var(--amber); color:var(--amber);}
   .lookup-btn:disabled{opacity:0.5; cursor:default;}
-  .lookup-status{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); min-height:14px;}
+  .lookup-status{font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-faint); min-height:14px;}
   .credit-row{display:flex; gap:6px; margin-bottom:8px; align-items:center; flex-wrap:wrap;}
-  .credit-row input{flex:1 1 140px; padding:8px 9px; border:1.5px solid var(--ink); border-radius:2px; font-family:'Inter',sans-serif; font-size:13px; background:#fffdf7;}
-  .credit-remove{background:none; border:1.5px solid var(--stamp); color:var(--stamp); border-radius:2px; width:30px; height:34px; cursor:pointer; font-size:15px; line-height:1;}
-  .add-credit-btn{font-family:'IBM Plex Mono',monospace; font-size:12px; border:1px dashed var(--brown); color:var(--brown-deep); background:transparent; padding:7px 10px; border-radius:2px; cursor:pointer;}
+  .credit-row input{flex:1 1 140px; padding:8px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); font-family:'Inter',sans-serif; font-size:13px; background:var(--kraft); color:var(--ink);}
+  .credit-remove{background:none; border:1px solid var(--stamp); color:var(--stamp); border-radius:var(--radius-sm); width:30px; height:34px; cursor:pointer; font-size:15px; line-height:1;}
+  .credit-remove:hover{background:rgba(217,105,90,0.12);}
+  .add-credit-btn{font-family:'Inter',sans-serif; font-weight:500; font-size:12.5px; border:1px dashed var(--border-strong); color:var(--ink-soft); background:transparent; padding:7px 11px; border-radius:var(--radius-sm); cursor:pointer;}
+  .add-credit-btn:hover{border-color:var(--amber); color:var(--amber);}
   .star-picker{display:flex; gap:4px;}
-  .star-picker button{background:none; border:none; font-size:24px; cursor:pointer; color:var(--line); padding:0; line-height:1;}
-  .star-picker button.filled{color:var(--gold);}
+  .star-picker button{background:none; border:none; font-size:23px; cursor:pointer; color:var(--border-strong); padding:0; line-height:1;}
+  .star-picker button.filled{color:var(--amber);}
   .flag-toggles{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
-  .like-toggle{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:13px;}
-  .like-toggle button{border:1.5px solid var(--teal); background:transparent; color:var(--teal); padding:6px 12px; border-radius:2px; cursor:pointer; font-family:inherit; font-weight:600;}
-  .like-toggle button.on{background:var(--teal); color:#fbf6e9;}
-  .like-toggle.priority button{border-color:var(--stamp); color:var(--stamp);}
-  .like-toggle.priority button.on{background:var(--stamp); color:#fbf6e9;}
+  .like-toggle{display:flex; align-items:center; gap:8px; font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-soft);}
+  .like-toggle button{border:1px solid var(--teal); background:transparent; color:var(--teal-deep); padding:6px 13px; border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-weight:600;}
+  .like-toggle button.on{background:rgba(124,147,184,0.18); color:var(--teal-deep);}
+  .like-toggle.priority button{border-color:var(--amber); color:var(--amber);}
+  .like-toggle.priority button.on{background:rgba(232,162,61,0.18); color:var(--amber);}
   .modal-actions{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;}
-  .btn{font-family:'IBM Plex Mono',monospace; font-size:13px; padding:10px 16px; border-radius:2px; cursor:pointer; border:1.5px solid var(--ink);}
-  .btn-primary{background:var(--ink); color:var(--card); flex:1;}
-  .btn-ghost{background:transparent; color:var(--ink);}
+  .btn{font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; padding:10px 17px; border-radius:var(--radius-sm); cursor:pointer; border:1px solid var(--border-strong); transition:background 0.15s, border-color 0.15s, color 0.15s;}
+  .btn-primary{background:var(--amber); color:#FFF9EE; border-color:var(--amber); flex:1;}
+  .btn-primary:hover{background:var(--amber-deep); border-color:var(--amber-deep);}
+  .btn-ghost{background:transparent; color:var(--ink-soft);}
+  .btn-ghost:hover{color:var(--ink); border-color:var(--border-strong);}
   .btn-danger{border-color:var(--stamp); color:var(--stamp); background:transparent;}
-  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--card); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:9px 16px; border-radius:3px; z-index:20; opacity:0; pointer-events:none; transition:opacity 0.25s; max-width:90vw; text-align:center;}
+  .btn-danger:hover{background:rgba(217,105,90,0.1);}
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--card-raised); border:1px solid var(--border-strong); color:var(--ink); font-family:'Inter',sans-serif; font-weight:500; font-size:12.5px; padding:10px 18px; border-radius:var(--radius); z-index:20; opacity:0; pointer-events:none; transition:opacity 0.25s; max-width:90vw; text-align:center; box-shadow:0 10px 26px rgba(24,22,15,0.16);}
   .toast.show{opacity:1;}
-  footer{position:relative; z-index:1; text-align:center; padding:20px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
-  footer button{background:none; border:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:11px;}
+  footer{position:relative; z-index:1; text-align:center; padding:22px; font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-faint);}
+  footer button{background:none; border:none; color:var(--ink-faint); text-decoration:underline; cursor:pointer; font-family:inherit; font-size:12px;}
+  footer button:hover{color:var(--ink-soft);}
   .bulk-check{position:absolute; top:6px; left:6px; width:17px; height:17px; z-index:2; cursor:pointer;}
-  .bulk-bar{position:fixed; left:0; right:0; bottom:0; z-index:15; background:var(--ink); color:var(--card); padding:12px 20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-family:'IBM Plex Mono',monospace; font-size:12px; box-shadow:0 -3px 10px rgba(0,0,0,0.25);}
-  .bulk-bar input[type=text]{padding:7px 9px; border:1px solid var(--card); border-radius:2px; background:transparent; color:var(--card); font-family:inherit; font-size:12px;}
-  .bulk-bar button{padding:7px 11px; border:1px solid var(--card); border-radius:2px; background:transparent; color:var(--card); cursor:pointer; font-family:inherit; font-size:12px;}
-  .bulk-bar button:hover{background:var(--card); color:var(--ink);}
+  .bulk-bar{position:fixed; left:0; right:0; bottom:0; z-index:15; background:var(--card-raised); border-top:1px solid var(--border-strong); color:var(--ink); padding:12px 20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-family:'Inter',sans-serif; font-size:13px; box-shadow:0 -6px 20px rgba(24,22,15,0.08);}
+  .bulk-bar input[type=text]{padding:7px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--kraft); color:var(--ink); font-family:inherit; font-size:13px;}
+  .bulk-bar button{padding:7px 12px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:transparent; color:var(--ink); cursor:pointer; font-family:inherit; font-size:13px;}
+  .bulk-bar button:hover{border-color:var(--amber); color:var(--amber);}
   .bulk-bar .push-right{margin-left:auto;}
   @media (max-width:520px){ .writer-row{flex-direction:column; align-items:flex-start; gap:4px;} .writer-name{min-width:auto;} .field-row{flex-direction:column;} }
   @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
@@ -186,8 +206,8 @@
 
 <header>
   <div class="masthead">
-    <div class="brand"><span class="card-icon" aria-hidden="true"></span>SONGCARD</div>
-    <div class="tagline">a credit log for songs worth remembering</div>
+    <div class="brand"><span class="card-icon" aria-hidden="true"></span>Roster</div>
+    <div class="tagline">Private catalog</div>
   </div>
   <div class="stats-row" id="statsRow">Loading catalog…</div>
 </header>
@@ -265,17 +285,17 @@
 </div>
 <div id="authGate" style="display:none; position:fixed; inset:0; background:var(--kraft); z-index:55; align-items:center; justify-content:center; padding:24px;">
   <div class="modal" style="max-width:380px; text-align:center;">
-    <div class="brand" style="justify-content:center; font-size:26px; margin-bottom:6px;"><span class="card-icon" aria-hidden="true"></span>SONGCARD</div>
+    <div class="brand" style="justify-content:center; font-size:26px; margin-bottom:6px;"><span class="card-icon" aria-hidden="true"></span>Roster</div>
     <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px; margin-bottom:20px;">This is your private catalog. Sign in with the Google account tied to this project to view it.</div>
     <button class="btn btn-primary" id="googleSignInBtn" type="button" style="width:100%;">Sign in with Google</button>
-    <div id="authError" style="margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--stamp);"></div>
+    <div id="authError" style="margin-top:12px; font-family:'Inter',sans-serif; font-size:12.5px; color:var(--stamp);"></div>
   </div>
 </div>
-<div id="migrationPanel" style="display:none; position:fixed; inset:0; background:rgba(33,29,24,0.72); z-index:70; align-items:center; justify-content:center; padding:24px;">
+<div id="migrationPanel" style="display:none; position:fixed; inset:0; background:rgba(8,8,10,0.75); z-index:70; align-items:center; justify-content:center; padding:24px;">
   <div class="modal" style="max-width:620px; width:100%;">
     <h2>Database migration</h2>
     <div class="sub" style="text-transform:none; letter-spacing:normal; font-size:13px;">Nothing currently stored is touched or deleted \u2014 this only writes new, separate collections.</div>
-    <pre id="migrationLog" style="white-space:pre-wrap; word-break:break-word; font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.5; background:#fffdf7; border:1.5px solid var(--ink); border-radius:2px; padding:12px; max-height:55vh; overflow-y:auto; margin:14px 0;"></pre>
+    <pre id="migrationLog" style="white-space:pre-wrap; word-break:break-word; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.6; background:var(--kraft); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; max-height:55vh; overflow-y:auto; margin:14px 0; color:var(--ink-soft);"></pre>
     <div class="modal-actions"><button class="btn btn-primary" id="closeMigrationPanel" type="button">Close</button></div>
   </div>
 </div>
@@ -946,24 +966,43 @@
     const upcoming = shows.filter(function(s){ return s.status==='upcoming'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
     const recent = recentlyAddedFeed(15);
     let html = '<div class="stats-section" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;"><h3 style="margin:0;">Upcoming shows</h3>' +
-      (artists.length ? '<button class="icon-btn" id="checkTicketmasterFeedBtn" type="button">check Ticketmaster for all artists</button>' : '') +
+      (artists.length ? '<button class="icon-btn" id="checkTicketmasterFeedBtn" type="button">check Ticketmaster \u2197</button>' : '') +
       '</div>';
     if(upcoming.length){
-      html += '<div class="writer-index">' + upcoming.map(function(s){
+      html += '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));">' + upcoming.map(function(s){
         const artistLinks = showArtistIds(s).map(function(aid){
           const a = findEntityById('artist', aid);
-          return a ? '<button data-entity-type="artist" data-entity-id="'+esc(aid)+'" style="background:none;border:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;">'+esc(a.name)+'</button>' : null;
+          return a ? { name: a.name, id: aid } : null;
         }).filter(Boolean);
         const venue = findEntityById('venue', s.venueId);
-        return '<div class="writer-row" data-edit-show="'+esc(s.id)+'" style="cursor:pointer;">' +
-          '<div class="writer-name" style="font-size:15px;">' + esc(s.date||'(no date)') + '</div>' +
-          '<div class="writer-count">' + (artistLinks.length?artistLinks.join(', '):'(missing artist)') + '</div>' +
-          '<div class="writer-songs">' + (venue?esc(venue.name):'') + '</div>' +
+        return '<div class="card" data-edit-show="'+esc(s.id)+'" style="cursor:pointer;">' +
+          '<div style="height:90px; border-radius:8px; background:linear-gradient(135deg,var(--kraft-deep),var(--border-strong)); margin-bottom:2px;"></div>' +
+          '<div class="song-title" style="font-size:16px;">' + (artistLinks.length ? esc(artistLinks.map(function(a){return a.name;}).join(', ')) : '(missing artist)') + '</div>' +
+          '<div class="artist" style="cursor:default;">' + (venue?esc(venue.name):'Venue TBD') + '</div>' +
+          '<div class="publisher">' + esc(s.date||'Date TBD') + '</div>' +
         '</div>';
       }).join('') + '</div>';
     } else {
-      html += '<div class="empty"><strong>No upcoming shows logged</strong>Add one from an Artist or Venue profile, or from the Shows tab.</div>';
+      html += '<div class="empty"><strong>No upcoming shows logged</strong>Add one from an Artist or Venue profile, check Ticketmaster above, or use the Shows tab.</div>';
     }
+
+    html += '<div class="stats-section" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;"><h3 style="margin:0;">New releases</h3>' +
+      (artists.length ? '<button class="icon-btn" id="checkSpotifyFeedBtn" type="button">check Spotify \u2197</button>' : '') +
+      '</div>';
+    const recentReleases = albums.slice().sort(function(a,b){ return approxCreatedAt(b)-approxCreatedAt(a); }).slice(0,6);
+    if(recentReleases.length){
+      html += '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">' + recentReleases.map(function(a){
+        return '<div class="card" data-feed-open="release|'+esc(a.id)+'" style="cursor:pointer;">' +
+          (a.photoUrl ? '<img src="'+esc(a.photoUrl)+'" alt="" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px;">' : '<div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,var(--kraft-deep),var(--border-strong));"></div>') +
+          '<div class="song-title" style="font-size:15px;">' + esc(a.title) + '</div>' +
+          '<div class="artist" style="cursor:default;">' + esc(releaseArtistName(a)) + '</div>' +
+          '<div class="publisher">' + esc(a.releaseType||'') + (a.releaseDate?' \u00b7 '+esc(a.releaseDate):'') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div class="writers-label" style="font-style:italic;">No releases logged yet.</div>';
+    }
+
     html += '<div class="stats-section"><h3>Recently added to your sheet</h3></div>';
     if(recent.length){
       html += '<div class="writer-index">' + recent.map(function(i){
@@ -979,6 +1018,9 @@
     mainEl.innerHTML = html;
     if(document.getElementById('checkTicketmasterFeedBtn')){
       document.getElementById('checkTicketmasterFeedBtn').addEventListener('click', function(){ openTicketmasterFeedModal(); });
+    }
+    if(document.getElementById('checkSpotifyFeedBtn')){
+      document.getElementById('checkSpotifyFeedBtn').addEventListener('click', function(){ openSpotifyReleasesFeedModal(); });
     }
     mainEl.querySelectorAll('[data-edit-show]').forEach(function(row){
       row.addEventListener('click', function(){ openShowModal(row.getAttribute('data-edit-show')); });
@@ -1230,6 +1272,20 @@
     });
   }
 
+  // ===== Your own server: real Spotify releases and Last.fm stats =====
+  async function fetchSpotifyReleases(artistName){
+    const res = await fetch(SERVER_BASE_URL + '/spotify/releases?artist=' + encodeURIComponent(artistName));
+    if(!res.ok) throw new Error('Server releases request failed: ' + res.status);
+    const data = await res.json();
+    return data.releases || [];
+  }
+  async function fetchArtistStats(artistName){
+    const res = await fetch(SERVER_BASE_URL + '/stats?artist=' + encodeURIComponent(artistName));
+    if(!res.ok) throw new Error('Server stats request failed: ' + res.status);
+    return res.json();
+  }
+
+
   function openTicketmasterModal(artistEnt){
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -1361,6 +1417,91 @@
       }
       statusEl.textContent = found.length
         ? 'Done \u2014 ' + found.length + ' upcoming show' + (found.length===1?'':'s') + ' found across ' + sortedArtists.length + ' artists.'
+        : 'Done \u2014 nothing found across ' + sortedArtists.length + ' artists.';
+    })();
+  }
+
+  function openSpotifyReleasesFeedModal(){
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '' +
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">' +
+        '<h2>Check Spotify for new releases</h2>' +
+        '<div class="lookup-status" id="spFeedStatus">Starting\u2026</div>' +
+        '<div id="spFeedResults" style="margin-top:8px; max-height:50vh; overflow-y:auto;"></div>' +
+        '<div class="modal-actions"><button class="btn btn-ghost" id="spFeedCloseBtn" type="button">Close</button></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#spFeedCloseBtn').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(ev){ if(ev.target===overlay) overlay.remove(); });
+
+    const statusEl = overlay.querySelector('#spFeedStatus');
+    const resultsEl = overlay.querySelector('#spFeedResults');
+    const existingSpotifyIds = new Set(albums.filter(function(a){ return a.spotifyId; }).map(function(a){ return a.spotifyId; }));
+    const existingTitles = new Set(albums.map(function(a){ return (a.title||'').trim().toLowerCase(); }));
+    const sortedArtists = artists.slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
+    const found = []; // { artist, release }
+
+    function releaseTypeFor(spotifyType){
+      if(spotifyType==='single') return 'Single';
+      if(spotifyType==='compilation') return 'Compilation';
+      return 'Album';
+    }
+
+    function renderResults(){
+      if(!found.length){
+        resultsEl.innerHTML = '<div class="writers-label" style="font-style:italic;">Nothing found yet.</div>';
+        return;
+      }
+      const sorted = found.slice().sort(function(a,b){ return (b.release.releaseDate||'').localeCompare(a.release.releaseDate||''); });
+      resultsEl.innerHTML = sorted.map(function(f){
+        const already = existingSpotifyIds.has(f.release.id) || existingTitles.has((f.release.title||'').trim().toLowerCase());
+        return '<div class="writer-row" style="cursor:default;">' +
+          (f.release.imageUrl ? '<img src="'+esc(f.release.imageUrl)+'" alt="" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;">' : '<div style="width:40px;height:40px;border-radius:6px;background:var(--card-raised);border:1px solid var(--border);flex-shrink:0;"></div>') +
+          '<div style="flex:1; min-width:0;"><div class="writer-name" style="font-size:14px;">' + esc(f.release.title||'') + '</div>' +
+          '<div class="writer-songs">' + esc(f.artist.name) + ' \u00b7 ' + esc(releaseTypeFor(f.release.type)) + ' \u00b7 ' + esc(f.release.releaseDate||'') + '</div></div>' +
+          (already
+            ? '<span class="admin-through">ALREADY ADDED</span>'
+            : '<button class="link-btn" data-add-sp-feed="' + esc(f.artist.id) + '|' + esc(f.release.id) + '" type="button">+ Add to Releases</button>') +
+        '</div>';
+      }).join('');
+      resultsEl.querySelectorAll('[data-add-sp-feed]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          const parts = btn.getAttribute('data-add-sp-feed').split('|');
+          const f = found.find(function(x){ return x.artist.id===parts[0] && x.release.id===parts[1]; });
+          if(!f) return;
+          const newRelease = normalizeRelease({
+            id: 'alb'+Date.now()+Math.random().toString(36).slice(2,7),
+            title: f.release.title,
+            artistId: f.artist.id,
+            labelId: '',
+            releaseType: releaseTypeFor(f.release.type),
+            releaseDate: f.release.releaseDate || '',
+            photoUrl: f.release.imageUrl || '',
+            notes: '',
+            spotifyId: f.release.id
+          });
+          albums.push(newRelease);
+          existingSpotifyIds.add(f.release.id);
+          await saveAlbums();
+          toast('Release added from Spotify');
+          renderResults();
+        });
+      });
+    }
+
+    (async function(){
+      for(let i=0; i<sortedArtists.length; i++){
+        const a = sortedArtists[i];
+        statusEl.textContent = 'Checking ' + (i+1) + ' of ' + sortedArtists.length + ': ' + a.name + '\u2026';
+        try{
+          const releases = await fetchSpotifyReleases(a.name);
+          releases.forEach(function(rel){ found.push({ artist: a, release: rel }); });
+          renderResults();
+        }catch(err){ /* skip this artist, keep going */ }
+      }
+      statusEl.textContent = found.length
+        ? 'Done \u2014 ' + found.length + ' release' + (found.length===1?'':'s') + ' found across ' + sortedArtists.length + ' artists.'
         : 'Done \u2014 nothing found across ' + sortedArtists.length + ' artists.';
     })();
   }
@@ -1878,6 +2019,9 @@
     const directChildren = directChildIds(type, id).map(function(cid){ return findEntityById(type, cid); }).filter(Boolean);
     const dup = ent.possibleDuplicateOf ? findEntityById(type, ent.possibleDuplicateOf) : null;
     const companyTypeTags = type==='company' ? (ent.companyTypes||[]).map(function(t){ return t.toUpperCase(); }).join(' / ') : '';
+    if(type==='artist'){
+      html += buildArtistHeroHeader(ent, id);
+    } else {
     html += '<div class="stat-tile" style="margin-bottom:18px;">' +
       '<div class="entity-header">' +
       (ent.photoUrl ? '<img class="entity-photo" src="'+esc(ent.photoUrl)+'" alt="" onerror="this.style.display=\'none\';">' : '<div class="entity-photo-placeholder">no photo</div>') +
@@ -1907,6 +2051,7 @@
       '</div>' + // close flex:1 name/details wrapper
       '</div>' + // close entity-header
     '</div>';
+    }
     if((type==='person' || type==='artist')){
       const subjAffiliations = affiliationsForSubject(type, id);
       html += '<div class="stat-tile" style="margin-bottom:18px;">' +
@@ -2656,6 +2801,80 @@
     mainEl.querySelectorAll('[data-edit-note]').forEach(function(row){
       row.addEventListener('click', function(){ openNoteModal(row.getAttribute('data-edit-note')); });
     });
+  }
+
+  function buildArtistHeroHeader(ent, id){
+    const w = findWatchlistEntry(id);
+    const growth = w ? watchlistGrowth(w) : null;
+    const best = bestSongForArtist(id);
+    const dup = ent.possibleDuplicateOf ? findEntityById('artist', ent.possibleDuplicateOf) : null;
+    const manager = ent.managerPersonId ? findEntityById('person', ent.managerPersonId) : null;
+    let html = '<div style="margin:-8px -20px 0; padding:0 20px;">' +
+      '<div style="height:150px; border-radius:0 0 var(--radius) var(--radius); margin:0 -20px; background:' +
+        (ent.photoUrl ? 'linear-gradient(to top, var(--kraft) 0%, rgba(250,248,243,0.15) 60%), url(\''+esc(ent.photoUrl)+'\') center/cover' : 'linear-gradient(135deg, var(--kraft-deep), var(--border-strong))') +
+      ';"></div>' +
+    '</div>';
+    html += '<div style="display:flex; gap:20px; align-items:flex-end; margin-top:-56px; position:relative; padding-bottom:20px; border-bottom:1px solid var(--border); flex-wrap:wrap;">';
+    html += ent.photoUrl
+      ? '<img src="'+esc(ent.photoUrl)+'" alt="" style="width:120px; height:120px; border-radius:14px; object-fit:cover; border:4px solid var(--kraft); flex-shrink:0; box-shadow:0 4px 14px rgba(24,22,15,0.15);">'
+      : '<div style="width:120px; height:120px; border-radius:14px; background:var(--card-raised); border:4px solid var(--kraft); flex-shrink:0; box-shadow:0 4px 14px rgba(24,22,15,0.15);"></div>';
+    html += '<div style="padding-bottom:6px; flex:1; min-width:200px;">' +
+      '<div style="font-family:\'Newsreader\',serif; font-weight:700; font-size:32px; line-height:1.05; color:var(--ink);">' + esc(ent.name) + '</div>' +
+      '<div class="publisher" style="margin-top:8px;">' + [
+        w && w.careerStage ? esc(w.careerStage) : null,
+        w && w.signedStatus ? esc(w.signedStatus) : null,
+        w && w.genre ? esc(w.genre) : null
+      ].filter(Boolean).join(' \u00b7 ') + '</div>' +
+      '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' +
+        (w && w.priority ? '<span class="stamp-mark stamp-priority">PRIORITY WATCH</span>' : '') +
+        (w ? '<span class="stamp-mark" style="border:1px solid var(--teal); color:var(--teal-deep); background:rgba(41,85,214,0.08);">' + starsHtml(w.conviction||0) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+    html += '<div style="display:flex; gap:8px; padding-bottom:6px; flex-wrap:wrap;">' +
+      '<a class="link-btn" target="_blank" rel="noopener" href="' + spotifyUrl(ent.name) + '">Spotify \u2197</a>' +
+      '<a class="link-btn" target="_blank" rel="noopener" href="' + geniusUrl(ent.name) + '">Genius \u2197</a>' +
+      '<button class="icon-btn" id="editEntityBtn" type="button">edit</button>' +
+      '<button class="icon-btn" id="deleteEntityBtn" type="button">delete</button>' +
+    '</div>';
+    html += '</div>'; // close identity row
+
+    // infobox + body layout
+    html += '<div style="display:grid; grid-template-columns:1fr 260px; gap:24px; margin-top:22px; align-items:start;">';
+    html += '<div>';
+    if(dup){
+      html += '<div class="stat-tile" style="margin-bottom:16px; border-color:var(--stamp);"><div class="publisher" style="color:var(--stamp);">\u26a0 Possible duplicate of <button data-entity-type="artist" data-entity-id="'+esc(dup.id)+'" style="background:none;border:none;color:var(--stamp);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(dup.name)+'</button> \u2014 review and merge manually if they\u2019re the same.</div></div>';
+    }
+    if(w && w.whyAdded){
+      html += '<div class="stat-tile" style="margin-bottom:16px;"><div class="writers-label">A&amp;R thesis</div><div style="font-family:\'Newsreader\',serif; font-style:italic; font-size:16.5px; line-height:1.55; margin-top:8px; color:var(--ink);">' + esc(w.whyAdded) + (w.thesis ? ' ' + esc(w.thesis) : '') + '</div></div>';
+    }
+    if(best){
+      html += '<div class="stat-tile" style="margin-bottom:16px;"><div class="writers-label">Best song logged</div><div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;"><button data-open-song="'+esc(best.id)+'" style="background:none;border:none;color:var(--ink);font-family:\'Newsreader\',serif;font-weight:600;font-size:17px;cursor:pointer;text-align:left;">'+esc(best.song)+'</button><span class="stars">'+starsHtml(best.rating)+'</span></div></div>';
+    }
+    if(ent.notes){
+      html += '<div class="stat-tile" style="margin-bottom:16px;"><div class="writers-label">Notes</div><div class="thoughts" style="margin-top:8px; -webkit-line-clamp:unset;">' + esc(ent.notes) + '</div></div>';
+    }
+    if(manager){
+      html += '<div class="publisher" style="margin-bottom:16px;">Manager: <button data-entity-type="person" data-entity-id="'+esc(manager.id)+'" style="background:none;border:none;color:var(--teal);text-decoration:underline;cursor:pointer;font:inherit;">'+esc(manager.name)+'</button></div>';
+    }
+    html += '</div>'; // close main column
+
+    html += '<div class="stat-tile" style="position:sticky; top:16px;">';
+    if(w && w.location){ html += '<div class="publisher" style="margin-bottom:6px;">Location: <strong style="color:var(--ink);">' + esc(w.location) + '</strong></div>'; }
+    if(w && w.discoveredDate){ html += '<div class="publisher" style="margin-bottom:6px;">Discovered: <strong style="color:var(--ink);">' + esc(w.discoveredDate) + '</strong></div>'; }
+    if(w && w.discoverySource){ html += '<div class="publisher" style="margin-bottom:6px;">Via: <strong style="color:var(--ink);">' + esc(w.discoverySource) + '</strong></div>'; }
+    if(w && w.nextReview){ html += '<div class="publisher" style="margin-bottom:6px;">Next review: <strong style="color:var(--ink);">' + esc(w.nextReview) + '</strong></div>'; }
+    if(growth){
+      html += '<div style="margin-top:10px; padding-top:12px; border-top:1px solid var(--border);">' +
+        '<div class="stat-num" style="font-size:24px;">' + (growth.pct>=0?'+':'') + growth.pct + '%</div>' +
+        '<div class="stat-label">' + esc(growth.label) + '</div>' +
+      '</div>';
+    }
+    if(!w){
+      html += '<div class="writers-label" style="font-style:italic;">Not on the Watchlist yet \u2014 add it below for conviction, growth tracking, and review dates.</div>';
+    }
+    html += '</div>'; // close infobox
+    html += '</div>'; // close grid layout
+    return html;
   }
 
   function watchlistSectionHtml(artistId){
